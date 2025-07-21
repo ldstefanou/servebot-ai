@@ -6,30 +6,6 @@ import torch.nn.functional as F
 import yaml
 
 
-class TokenEmbedding(nn.Module):
-    def __init__(self, vocab_size: int, d_model: int, seq_length: int):
-        super().__init__()
-        self.d_model = d_model
-        self.token_embedding = nn.Embedding(vocab_size, d_model)
-        self.pos_embedding = nn.Embedding(seq_length, d_model)
-        self.register_buffer(
-            "scale", torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
-        )
-
-    def forward(self, token_ids: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_length = token_ids.shape
-        positions = (
-            torch.arange(seq_length, device=token_ids.device)
-            .unsqueeze(0)
-            .expand(batch_size, -1)
-        )
-
-        token_emb = self.token_embedding(token_ids)
-        pos_emb = self.pos_embedding(positions)
-
-        return (token_emb + pos_emb) * self.scale
-
-
 class AttentionHead(nn.Module):
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
