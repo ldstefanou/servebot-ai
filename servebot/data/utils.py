@@ -1,11 +1,7 @@
 from collections import defaultdict
 from heapq import merge
 
-import numpy as np
-import pandas as pd
 import torch
-from data.embeddings import decode_batch_of_embeddings
-from tabulate import tabulate
 from torch.nn.utils.rnn import pad_sequence
 
 

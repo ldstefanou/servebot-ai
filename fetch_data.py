@@ -3,7 +3,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from io import StringIO
-from pathlib import Path
 
 import pandas as pd
 import requests
