@@ -1,0 +1,55 @@
+# Global model configuration
+tokenizer_name: gpt2
+batch_size: 300
+
+d_model: 128
+seq_length: 128
+dropout: 0.1
+
+# Data configuration
+embedders: ["winner_name", "year", "surface", "tournament", "winner_hand", "round", "winner_rank"]
+columns: [
+  "time_since_epoch",
+  "winner_name_token",
+  "loser_name_token",
+  "winner_rank_token",
+  "loser_rank_token",
+  "winner_hand_token",
+  "loser_hand_token",
+  "tournament_token",
+  "surface_token",
+  "year_token",
+  "round_token",
+  "h2h_winner_player",
+  "h2h_loser_player",
+  "is_validation",
+  "winner_age",
+  "loser_age",
+  "target"
+]
+
+# Architecture definition
+block_1:
+  n_heads: 8
+  mlp:
+    d_hidden: 256
+
+# block_2:
+#   n_heads: 4
+#   mlp:
+#     d_hidden: 256
+
+# block_3:
+#   n_heads: 4
+#   mlp:
+#     d_hidden: 256
+
+# block_4:
+#   n_heads: 4
+#   mlp:
+#     d_hidden: 256
+
+# block_3:
+#   n_heads: 12
+#   mlp:
+#     d_hidden: 1024
