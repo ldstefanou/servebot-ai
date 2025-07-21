@@ -107,7 +107,7 @@ class TransformerBlock(nn.Module):
         return out
 
 
-class TransformerLLM(nn.Module):
+class Transformer(nn.Module):
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
         self.config = config
@@ -115,36 +115,14 @@ class TransformerLLM(nn.Module):
         # Extract global config
         global_config = {k: v for k, v in config.items() if not k.startswith("block_")}
 
-        self.embedding = TokenEmbedding(
-            global_config["vocab_size"],
-            global_config["d_model"],
-            global_config["seq_length"],
-        )
-
         # Build blocks dynamically
         self.blocks = nn.ModuleList()
         for key, block_config in config.items():
             if key.startswith("block_"):
                 self.blocks.append(TransformerBlock(block_config, global_config))
 
-        self.to_pred = nn.Linear(
-            global_config["d_model"], global_config["vocab_size"], bias=False
-        )
-
-    def forward(self, x):
-        x = self.embedding(x)
-        for block in self.blocks:
-            x = block(x)
-        return self.to_pred(x)
-
     @classmethod
     def from_yaml(cls, yaml_path: str):
         with open(yaml_path, "r") as f:
             config = yaml.safe_load(f)
-
-        # Infer vocab_size from tokenizer
-        tokenizer_name = config.get("tokenizer_name", "gpt2")
-        tokenizer = tiktoken.encoding_for_model(tokenizer_name)
-        config["vocab_size"] = tokenizer.n_vocab
-
         return cls(config)

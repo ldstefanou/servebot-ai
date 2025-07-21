@@ -3,10 +3,29 @@ from typing import Dict
 import torch
 import torch.nn as nn
 from model.time_encoding import ContinuousTimeEncoding
-from model.transformer import TransformerLLM
+from model.transformer import Transformer
 
 
-def create_player_attention_mask(winner_tokens, loser_tokens):
+def create_player_attention_mask(
+    winner_tokens: torch.tensor, loser_tokens: torch.tensor
+):
+    """Create attention mask allowing only player-specific context.
+
+    Each match can only attend to previous matches involving the same players,
+    preventing spurious correlations between unrelated matches.
+
+    Parameters
+    ----------
+    winner_tokens : torch.Tensor
+        Winner player tokens, shape [batch, seq_len]
+    loser_tokens : torch.Tensor
+        Loser player tokens, shape [batch, seq_len]
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean attention mask, shape [batch, seq_len, seq_len]
+    """
     batch_size, seq_len = winner_tokens.shape
 
     # Create causal mask (only attend to previous positions)
@@ -34,7 +53,7 @@ def create_player_attention_mask(winner_tokens, loser_tokens):
     return attention_mask
 
 
-class TennisTransformer(TransformerLLM):
+class TennisTransformer(Transformer):
     def __init__(self, config, embeddings: Dict[str, Dict[str, int]], target_size: int):
         super().__init__(config)
         self.embedding_dict = nn.ModuleDict()

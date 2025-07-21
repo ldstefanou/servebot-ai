@@ -2,9 +2,24 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
+import torch
 
 
 def create_embeddings(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, int]]:
+    """Create token mappings for categorical features.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe with tennis match data
+    cols : List[str]
+        Column names to create embeddings for
+
+    Returns
+    -------
+    Dict[str, Dict[str, int]]
+        Mapping from feature values to integer tokens
+    """
     embeddings = {}
     for col in cols:
         series = df[col]
@@ -23,6 +38,20 @@ def create_embeddings(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, 
 
 
 def apply_embeddings(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
+    """Apply token mappings to dataframe columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe
+    embeddings : Dict[str, Dict[str, int]]
+        Token mappings from create_embeddings()
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe with added _token columns
+    """
     for embedding_key, mapping in embeddings.items():
         if embedding_key.startswith("player_"):
             # Shared player embeddings - apply to both winner and loser
@@ -41,7 +70,23 @@ def apply_embeddings(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     return df.dropna(subset=token_columns).reset_index(drop=True)
 
 
-def decode_batch_of_embeddings(batch, embeddings) -> Dict:
+def decode_batch_of_embeddings(
+    batch: Dict[str, torch.tensor], embeddings: Dict[str, Dict[str, int]]
+) -> Dict:
+    """Convert token tensors back to original string values.
+
+    Parameters
+    ----------
+    batch : Dict
+        Batch dictionary with token tensors
+    embeddings : Dict[str, Dict[str, int]]
+        Token mappings
+
+    Returns
+    -------
+    Dict
+        Decoded string values in same batch format
+    """
     reverse_embeddings = {}
     for key, mapping in embeddings.items():
         reverse_embeddings[key] = {v: k for k, v in mapping.items()}

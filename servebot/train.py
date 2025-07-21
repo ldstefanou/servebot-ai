@@ -1,8 +1,5 @@
 import argparse
-from collections import deque
 
-import numpy as np
-import pandas as pd
 import torch
 import torch.nn.functional as F
 from data.dataset import TennisDataset, ValSampler
@@ -13,12 +10,6 @@ from model.servebot import TennisTransformer
 from model.transformer import TransformerLLM
 from paths import get_dataset_path, save_model_artifacts
 from torch.utils.data import DataLoader
-
-# Trackers for running averages
-loss_tracker = deque(maxlen=100)
-train_acc_tracker = deque(maxlen=100)
-val_correct_tracker = deque(maxlen=100)
-val_seen_tracker = deque(maxlen=100)
 
 
 def validate(model, val_dl):
@@ -61,34 +52,6 @@ def validate(model, val_dl):
 
     print_calibration_table(all_probas, all_correct)
     print("=" * 80)
-
-
-def log_loss(loss, out, batch, ep: int, batch_no: int, total_batches: int, lr: float):
-    # Calculate training and validation accuracy using existing predictions
-    predictions = torch.argmax(out, dim=-1)
-    correct = predictions == batch["target"]
-
-    # Training accuracy (where is_validation == 0)
-    train_correct = correct & batch["loss_mask"]
-    train_accuracy = train_correct.sum() / batch["loss_mask"].sum()
-
-    # Validation accuracy (where is_validation == 1)
-    val_mask = batch["is_validation"]
-    val_correct = correct & val_mask
-
-    # Update trackers
-    loss_tracker.append(loss.item())
-    train_acc_tracker.append(train_accuracy.item())
-    val_seen_tracker.append(val_mask.sum().item())
-    val_correct_tracker.append(val_correct.sum().item())
-
-    avg_loss = np.mean(loss_tracker)
-    avg_train_acc = np.mean(train_acc_tracker)
-    avg_val_acc = sum(val_correct_tracker) / (sum(val_seen_tracker) + 1)
-
-    print(
-        f"Epoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f}, LR: {lr:.6f}"
-    )
 
 
 def update_loss(out, batch, optim, scheduler):
