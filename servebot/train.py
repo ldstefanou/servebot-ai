@@ -147,6 +147,7 @@ if __name__ == "__main__":
         sample_size=args.sample,
         dataset_path=dataset_path,
         sequence_type=args.sequence_type,
+        source_filter=args.dataset,
     )
     print(f"Using sequence type: {args.sequence_type}")
 

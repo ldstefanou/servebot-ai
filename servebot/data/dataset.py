@@ -17,6 +17,7 @@ class TennisDataset(Dataset):
         sample_size: int = None,
         dataset_path: str = "data/atp_matches_all_levels.parquet",
         sequence_type: str = "player",
+        source_filter: str = "all",
     ):
         self.seq_length = seq_length
         self.config_path = config_path
@@ -30,7 +31,7 @@ class TennisDataset(Dataset):
 
         # Load data to create shared vocabulary
         df = pd.read_parquet(dataset_path)
-        df = prepare_df(df, sample_size=sample_size)
+        df = prepare_df(df, sample_size=sample_size, source_filter=source_filter)
 
         self.embeddings = create_embeddings(df, self.embedders)
         self._create_sequences(df, sequence_type)

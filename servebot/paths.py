@@ -8,10 +8,11 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 STATIC_DIR = DATA_DIR / "static"
 
-# Dataset paths
+# Dataset paths - single source file with filtering
 DATASETS = {
     "all": STATIC_DIR / "atp_matches_all_levels.parquet",
-    "atp": STATIC_DIR / "atp_matches_combined.parquet",
+    "atp": STATIC_DIR
+    / "atp_matches_all_levels.parquet",  # Same file, filtered by source column
 }
 
 # Model artifacts

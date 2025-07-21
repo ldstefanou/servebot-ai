@@ -15,3 +15,26 @@ Key innovation: **player-specific attention masking** ensures each historical ma
 - Relative player strength embeddings
 - Head-to-head record tracking
 - Multiple sequence construction strategies
+
+## Quick Start
+
+1. **Setup environment and data**
+   ```bash
+   ./setup.sh
+   ```
+
+2. **Train model**
+   ```bash
+   # Train on all matches (ATP + Futures + Qualifiers)
+   uv run python servebot/train.py --dataset all
+
+   # Train on ATP main tour only
+   uv run python servebot/train.py --dataset atp
+   ```
+
+3. **Available options**
+   - `--dataset`: `all` (default) or `atp` for main tour only
+   - `--sequence-type`: `player`, `temporal`, or `match`
+   - `--sample N`: Use only N matches for testing
+   - `--epochs N`: Number of training epochs
+   - `--batch-size N`: Batch size

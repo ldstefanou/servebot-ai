@@ -41,16 +41,26 @@ def prepare_df(
     validation_size: float = 0.05,
     sample_size: Optional[int] = None,
     validation_by_slam: bool = True,
+    source_filter: Optional[str] = None,
 ) -> pd.DataFrame:
     df = df.reset_index(drop=True)
+
+    # Filter by source if specified
+    if source_filter == "atp":
+        df = df[df["source"] == "atp"].copy()
+        print(f"Filtered to ATP matches only: {len(df)} matches")
+    elif source_filter == "all":
+        print(f"Using all matches: {len(df)} matches")
+    # If source_filter is None or any other value, use all data
 
     # Dates & match_id
     df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
     df = df.sort_values(["date", "tourney_id", "match_num"])
+
     df["year"] = df["date"].dt.year
     df["rel_year"] = (df["date"].dt.year - df["date"].dt.year.min()) + 1
     df["time_since_epoch"] = df["date"].astype("int64") // 10**9
-    # df = df[df["year"] > 2000]
+
     sets = df[["winner_name", "loser_name"]].apply(frozenset, axis=1)
     df["h2h_winner_player"] = df.groupby([sets, "winner_name"]).cumcount()
     df["h2h_loser_player"] = df.groupby(sets).cumcount() - df["h2h_winner_player"]
@@ -94,7 +104,7 @@ def prepare_df(
         # Now filter out rows that come after the last index of the last Grand Slam
         df = df.loc[:last_slam_index].copy()
         # Drop rows after the last validation slam
-        # df = df[df["date"] <= max_val_date].copy()
+        # df = df[df["date"] <= max_valw_date].copy()
 
     else:
         val_size = int(len(df) * (1 - validation_size))
