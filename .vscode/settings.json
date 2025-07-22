@@ -1,0 +1,16 @@
+{
+    "python.analysis.extraPaths": ["."],
+    "python.defaultInterpreterPath": "./.venv/bin/python",
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.importFormat": "absolute",
+    "python.analysis.autoSearchPaths": false,
+    "python.analysis.stubPath": "",
+    "python.workspaceSymbols.enabled": true,
+    "python.analysis.include": [
+        "**/*.py"
+    ],
+    "python.analysis.exclude": [
+        "**/.venv/**",
+        "**/node_modules/**"
+    ]
+}

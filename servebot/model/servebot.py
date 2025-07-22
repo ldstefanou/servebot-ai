@@ -2,13 +2,12 @@ from typing import Dict
 
 import torch
 import torch.nn as nn
+import yaml
 from model.time_encoding import ContinuousTimeEncoding
 from model.transformer import Transformer
 
 
-def create_player_attention_mask(
-    winner_tokens: torch.tensor, loser_tokens: torch.tensor
-):
+def create_player_attention_mask(winner_tokens, loser_tokens):
     """Create attention mask allowing only player-specific context.
 
     Each match can only attend to previous matches involving the same players,
@@ -54,7 +53,7 @@ def create_player_attention_mask(
 
 
 class TennisTransformer(Transformer):
-    def __init__(self, config, embeddings: Dict[str, Dict[str, int]], target_size: int):
+    def __init__(self, config, embeddings: Dict[str, Dict[str, int]]):
         super().__init__(config)
         self.embedding_dict = nn.ModuleDict()
         self.time = ContinuousTimeEncoding(config["d_model"])
@@ -76,7 +75,7 @@ class TennisTransformer(Transformer):
         self.h2h_scale = nn.Parameter(torch.tensor([1.0, 1.0]))
         self.age_scale = nn.Parameter(torch.tensor([1.0, 1.0]))
 
-        self.to_pred = nn.Sequential(nn.Linear(config["d_model"], target_size))
+        self.to_pred = nn.Sequential(nn.Linear(config["d_model"], 2))
 
     def forward(self, batch):
         # Get basic embeddings
@@ -110,7 +109,7 @@ class TennisTransformer(Transformer):
 
         # Player embeddings with advantages
         left_player_emb = embeddings.pop("winner_name") + w_age
-        right_player_emb = embeddings.pop("loser_name") + l_age
+        right_player_emb = embeddings.pop("loser_name") - l_age
 
         left_player_rank = embeddings.pop("winner_rank")
         right_player_rank = embeddings.pop("loser_rank")
@@ -131,16 +130,19 @@ class TennisTransformer(Transformer):
         rel_rank = left_player_rank - right_player_rank
         pos = embeddings.pop("position")
 
+        rel_strength = left_player_emb - right_player_emb
         # Stack remaining features
         features = torch.stack(
             [
                 rel_strength,
-                # rel_rank,
-                # embeddings["year"],
-                # embeddings["surface"],
-                # embeddings["round"],
+                rel_rank,
+                age_emb,
+                h2h_emb,
+                embeddings["year"],
+                embeddings["surface"],
+                embeddings["round"],
                 embeddings["tournament"],
-                # momentum_signal
+                momentum_signal,
             ],
             dim=-2,
         )
@@ -154,3 +156,21 @@ class TennisTransformer(Transformer):
             x = block(x, attention_mask)
 
         return self.to_pred(x)
+
+    @classmethod
+    def from_saved_artifacts(
+        cls, model_path: str, embeddings: Dict[str, Dict[str, int]]
+    ):
+        """Load model from saved artifacts directory"""
+        # Load config
+        with open(f"{model_path}/model_config.yaml", "r") as f:
+            config = yaml.safe_load(f)
+
+        # Create model instance
+        model = cls(config, embeddings)
+
+        # Load weights
+        weights = torch.load(f"{model_path}/model_weights.pt", map_location="cpu")
+        model.load_state_dict(weights)
+
+        return model

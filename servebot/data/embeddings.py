@@ -2,7 +2,6 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
-import torch
 
 
 def create_embeddings(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, int]]:
@@ -71,7 +70,7 @@ def apply_embeddings(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
 
 
 def decode_batch_of_embeddings(
-    batch: Dict[str, torch.tensor], embeddings: Dict[str, Dict[str, int]]
+    batch: Dict, embeddings: Dict[str, Dict[str, int]]
 ) -> Dict:
     """Convert token tensors back to original string values.
 

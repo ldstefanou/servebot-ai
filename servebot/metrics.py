@@ -4,19 +4,24 @@ from collections import deque
 import numpy as np
 import pandas as pd
 import torch
+from data.embeddings import decode_batch_of_embeddings
 from tabulate import tabulate
-
-from servebot.data.embeddings import decode_batch_of_embeddings
 
 loss_tracker = deque(maxlen=100)
 train_acc_tracker = deque(maxlen=100)
 val_correct_tracker = deque(maxlen=100)
 val_seen_tracker = deque(maxlen=100)
 
+# Global running totals
+total_val_correct = 0
+total_val_seen = 0
+total_train_correct = 0
+total_train_seen = 0
+
 
 def log_loss(
-    loss: torch.Tensor,
-    out: torch.Tensor,
+    loss,
+    out,
     batch: dict,
     ep: int,
     batch_no: int,
@@ -41,16 +46,23 @@ def log_loss(
     val_seen_tracker.append(val_mask.sum().item())
     val_correct_tracker.append(val_correct.sum().item())
 
+    # Update global running totals
+    global total_val_correct, total_val_seen, total_train_correct, total_train_seen
+    total_val_correct += val_correct.sum().item()
+    total_val_seen += val_mask.sum().item()
+    total_train_correct += train_correct.sum().item()
+    total_train_seen += batch["loss_mask"].sum().item()
+
     avg_loss = np.mean(loss_tracker)
-    avg_train_acc = np.mean(train_acc_tracker)
-    avg_val_acc = sum(val_correct_tracker) / (sum(val_seen_tracker) + 1)
+    avg_train_acc = total_train_correct / (total_train_seen + 1e-8)
+    avg_val_acc = total_val_correct / (total_val_seen + 1e-8)
 
     print(
         f"Epoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f}, LR: {lr:.6f}"
     )
 
 
-def print_sequence_results(batch: dict, out: torch.Tensor, mappings: dict):
+def print_sequence_results(batch: dict, out, mappings: dict):
     # random sequence from batch
     for rnd in range(out.shape[0]):
 
@@ -72,7 +84,7 @@ def print_sequence_results(batch: dict, out: torch.Tensor, mappings: dict):
         preds = preds[rnd, :sequence_length].tolist()
         is_validation = batch["is_validation"][rnd, :sequence_length].tolist()
 
-        for i in range(sequence_length):
+        for i in range(sequence_length - 1, sequence_length):
             is_val_match = is_validation[i]
             if not is_val_match:
                 continue
