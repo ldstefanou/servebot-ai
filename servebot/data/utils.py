@@ -5,9 +5,7 @@ import torch
 from torch.nn.utils.rnn import pad_sequence
 
 
-def merge_dicts_sorted(
-    d1: dict[str, list[int]], d2: dict[str, list[int]]
-) -> dict[str, list[int]]:
+def merge_dicts_sorted(d1, d2) -> dict[str, list[int]]:
     result = defaultdict(list)
     all_keys = set(d1) | set(d2)
 

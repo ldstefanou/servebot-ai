@@ -2,6 +2,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+from paths import get_dataset_path
 
 
 def walk_back_split(df, target_validation_players=100):
@@ -36,62 +37,126 @@ def sample_df_by_match_id(df: pd.DataFrame, size: int):
     return df
 
 
-def prepare_df(
-    df: pd.DataFrame,
-    validation_size: float = 0.05,
-    sample_size: Optional[int] = None,
-    validation_by_slam: bool = True,
-    source_filter: Optional[str] = None,
-) -> pd.DataFrame:
-    df = df.reset_index(drop=True)
-
-    # Filter by source if specified
-    if source_filter == "atp":
-        df = df[df["source"] == "atp"].copy()
-        print(f"Filtered to ATP matches only: {len(df)} matches")
-    elif source_filter == "all":
-        print(f"Using all matches: {len(df)} matches")
-    # If source_filter is None or any other value, use all data
-
-    # Dates & match_id
+def load_training_dataframe():
+    df = pd.read_parquet(get_dataset_path("all"))
     df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
-    df = df.sort_values(["date", "tourney_id", "match_num"])
-
-    df["year"] = df["date"].dt.year
-    df["rel_year"] = (df["date"].dt.year - df["date"].dt.year.min()) + 1
     df["time_since_epoch"] = df["date"].astype("int64") // 10**9
+    df = df.sort_values(["date", "tourney_id", "match_num"])
+    return df
 
+
+def bin_categorical_features(df: pd.DataFrame):
+    """Create categorical bins for age, height, and rank features"""
+
+    # Age binning - career stage bins
+    df["winner_age"] = df["winner_age"].fillna(df["winner_age"].mean())
+    df["loser_age"] = df["loser_age"].fillna(df["loser_age"].mean())
+
+    age_bins = [0, 18, 21, 25, 29, 33, float("inf")]
+    age_labels = [
+        "Junior",
+        "Rising",
+        "Prime Early",
+        "Prime Peak",
+        "Veteran",
+        "Late Career",
+    ]
+
+    df["winner_age_group"] = pd.cut(
+        df["winner_age"], bins=age_bins, labels=age_labels
+    ).astype(str)
+    df["loser_age_group"] = pd.cut(
+        df["loser_age"], bins=age_bins, labels=age_labels
+    ).astype(str)
+
+    # Height binning - clean outliers and create strategic bins
+    df["winner_ht"] = df["winner_ht"].replace(0, np.nan)  # Replace 0s with NaN
+    df["loser_ht"] = df["loser_ht"].replace(0, np.nan)
+
+    # Filter out clearly wrong heights (< 150cm or > 220cm)
+    df.loc[df["winner_ht"] < 150, "winner_ht"] = np.nan
+    df.loc[df["winner_ht"] > 220, "winner_ht"] = np.nan
+    df.loc[df["loser_ht"] < 150, "loser_ht"] = np.nan
+    df.loc[df["loser_ht"] > 220, "loser_ht"] = np.nan
+
+    # Fill missing heights with mean
+    df["winner_ht"] = df["winner_ht"].fillna(df["winner_ht"].mean())
+    df["loser_ht"] = df["loser_ht"].fillna(df["loser_ht"].mean())
+
+    height_bins = [0, 175, 185, 193, float("inf")]
+    height_labels = ["Short", "Average", "Tall", "Very Tall"]
+
+    df["winner_height_group"] = pd.cut(
+        df["winner_ht"], bins=height_bins, labels=height_labels
+    ).astype(str)
+    df["loser_height_group"] = pd.cut(
+        df["loser_ht"], bins=height_bins, labels=height_labels
+    ).astype(str)
+
+    # Rank binning
+    ranking_bins = [-1, 0, 1, 5, 10, 20, 50, 100, 200, 500, 1000, float("inf")]
+    ranking_labels = [
+        "Unranked",
+        "#1",
+        "Top 5",
+        "Top 10",
+        "Top 20",
+        "Top 50",
+        "Top 100",
+        "Top 200",
+        "Top 500",
+        "Top 1000",
+        "1000+",
+    ]
+
+    df["winner_rank"] = pd.cut(
+        df["winner_rank"].fillna(0), bins=ranking_bins, labels=ranking_labels
+    ).astype(str)
+    df["loser_rank"] = pd.cut(
+        df["loser_rank"].fillna(0), bins=ranking_bins, labels=ranking_labels
+    ).astype(str)
+
+    return df
+
+
+def clean_dataframe(df: pd.DataFrame):
+    # time stuff
+    df["year"] = df["date"].dt.year
+
+    # h2h scores
     sets = df[["winner_name", "loser_name"]].apply(frozenset, axis=1)
     df["h2h_winner_player"] = df.groupby([sets, "winner_name"]).cumcount()
     df["h2h_loser_player"] = df.groupby(sets).cumcount() - df["h2h_winner_player"]
-    cleaned_tourney = df["tourney_name"].str.split(" ").apply(lambda x: " ".join(x[:4]))
-    biggest_tourney = cleaned_tourney.value_counts().sort_values(ascending=False)[:100]
-    df["tournament"] = np.where(
-        cleaned_tourney.isin(biggest_tourney.index), cleaned_tourney, "Other tournament"
+
+    # match id
+    df["match_id"] = np.arange(df.shape[0])
+
+    # Apply categorical binning
+    df = bin_categorical_features(df)
+
+    df["year"] = df["date"].dt.year
+    df["tourney_str"] = (
+        df["tourney_name"].str.split(" ").apply(lambda x: " ".join(x[:4]))
     )
-    df["match_id"] = df.index
+    biggest_tourney = (
+        df["tourney_str"].value_counts().sort_values(ascending=False)[:100]
+    )
+    df["tournament"] = np.where(
+        df["tourney_str"].isin(biggest_tourney.index),
+        df["tourney_str"],
+        "Other tournament",
+    )
+    return df
 
-    df["winner_age"] = df["winner_age"].fillna(25)
-    df["loser_age"] = df["loser_age"].fillna(25)
 
-    df["winner_rank"] = pd.cut(
-        df["winner_rank"].fillna(0),
-        bins=(-1, 0, 1, 2, 3, 4, 5, 10, 25, 50, float("inf")),
-    ).astype(str)
-    df["loser_rank"] = pd.cut(
-        df["loser_rank"].fillna(0),
-        bins=(-1, 0, 1, 2, 3, 4, 5, 10, 25, 50, float("inf")),
-    ).astype(str)
+def set_validation_matches(
+    df: pd.DataFrame, validate_on_last_slam: bool = True, validation_size=0.05
+):
 
-    # 2 means left wins, 1 means right wins (doesn't appear in the dataset so we will randomly swap in __get_item__)
-    df["target"] = 2
-    if sample_size is not None:
-        df = sample_df_by_match_id(df, sample_size)
-
-    if validation_by_slam:
+    if validate_on_last_slam:
         # Define Grand Slam names
         grand_slams = ["australian open", "roland garros", "wimbledon", "us open"]
-        is_slam = cleaned_tourney.str.lower().str.contains("|".join(grand_slams))
+        is_slam = df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
         tourney_id = df.groupby(is_slam)["tourney_id"].last().loc[True]
 
         # Mark validation rows
@@ -103,12 +168,23 @@ def prepare_df(
 
         # Now filter out rows that come after the last index of the last Grand Slam
         df = df.loc[:last_slam_index].copy()
-        # Drop rows after the last validation slam
-        # df = df[df["date"] <= max_valw_date].copy()
 
     else:
         val_size = int(len(df) * (1 - validation_size))
         validation_match_ids = df[val_size:]["match_id"].unique()
         df["is_validation"] = df["match_id"].isin(validation_match_ids)
 
+    return df
+
+
+def load_data(sample: Optional[int] = None, filter_matches: str = "all"):
+    df = load_training_dataframe()
+    df = clean_dataframe(df)
+
+    # Filter by match type
+    if filter_matches == "atp":
+        df = df[df["source"] == "atp"]
+
+    if sample is not None:
+        df = sample_df_by_match_id(df, sample)
     return df

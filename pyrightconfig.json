@@ -1,0 +1,19 @@
+{
+    "include": [
+        "servebot"
+    ],
+    "exclude": [
+        "**/.venv",
+        "**/node_modules"
+    ],
+    "pythonPath": "./.venv/bin/python",
+    "venvPath": ".",
+    "venv": ".venv",
+    "executionEnvironments": [
+        {
+            "root": "servebot",
+            "pythonPath": "./.venv/bin/python",
+            "extraPaths": ["."]
+        }
+    ]
+}

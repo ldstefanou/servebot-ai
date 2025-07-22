@@ -1,10 +1,10 @@
 # Global model configuration
-tokenizer_name: gpt2
+sequence_type: "match"
 batch_size: 300
 
 d_model: 128
 seq_length: 128
-dropout: 0.1
+dropout: 0.0
 
 # Data configuration
 embedders: ["winner_name", "year", "surface", "tournament", "winner_hand", "round", "winner_rank"]
@@ -25,31 +25,25 @@ columns: [
   "is_validation",
   "winner_age",
   "loser_age",
-  "target"
 ]
 
 # Architecture definition
 block_1:
-  n_heads: 8
+  n_heads: 4
   mlp:
-    d_hidden: 256
+    d_hidden: 512
 
-# block_2:
-#   n_heads: 4
-#   mlp:
-#     d_hidden: 256
+block_2:
+  n_heads: 4
+  mlp:
+    d_hidden: 512
 
-# block_3:
-#   n_heads: 4
-#   mlp:
-#     d_hidden: 256
+block_3:
+  n_heads: 4
+  mlp:
+    d_hidden: 512
 
-# block_4:
-#   n_heads: 4
-#   mlp:
-#     d_hidden: 256
-
-# block_3:
-#   n_heads: 12
-#   mlp:
-#     d_hidden: 1024
+block_4:
+  n_heads: 4
+  mlp:
+    d_hidden: 512

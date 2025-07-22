@@ -1,6 +1,6 @@
 from collections import defaultdict
 from heapq import merge
-from typing import Dict, List
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -10,27 +10,34 @@ from numpy.lib.stride_tricks import sliding_window_view
 
 
 class PlayerIndex:
-    def __init__(self, index: Dict[str, int]):
-        self.index = index
+    def __init__(self, df: pd.DataFrame):
+        df = df.reset_index(drop=True)
+
+        winner_matches = df.groupby("winner_name").indices
+        loser_matches = df.groupby("loser_name").indices
+        self.index = merge_dicts_sorted(winner_matches, loser_matches)
+        self.df = df
+
+    @property
+    def players(self):
+        return list(self.index.keys())
 
     def get_match_idx_by_player(self, player: str):
         return self.index[player]
 
-    def get_match_sequence_by_player(self, player: str):
-        return np.arange(1, len(self.index[player]) + 1)
+    def get_matches_by_players(self, player_1: str, player_2: str):
+        left = self.get_match_idx_by_player(player_1)
+        right = self.get_match_idx_by_player(player_2)
+        merged = np.unique(list(merge(left, right)))
+        return merged
 
-    def get_age_by_player(self, player: str):
-        return np.arange(1, len(self.index[player]) + 1)
-
-
-def create_player_index(df: pd.DataFrame) -> Dict[str, List[int]]:
-    winner_matches = df.groupby("winner_name").indices
-    loser_matches = df.groupby("loser_name").indices
-    index = merge_dicts_sorted(winner_matches, loser_matches)
-    return PlayerIndex(index)
+    def get_latest_player_statistic(self, player, key):
+        rows = self.get_match_idx_by_player(player)
+        return self.df.iloc[rows[-1]][key]
 
 
 def create_sliding_window_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):
+    """Create sequences using chronological sliding window."""
     containers = defaultdict(list)
     arrays = {}
     for col in keys:
@@ -56,13 +63,14 @@ def create_sliding_window_sequences(df: pd.DataFrame, keys: List[str], seq_lengt
 def create_player_specific_sequences(
     df: pd.DataFrame, keys: List[str], seq_length: int
 ):
+    """Create sequences from each player's match history."""
     containers = defaultdict(list)
     arrays = {}
     for col in keys:
         arrays[col] = df[col].values
 
-    player_index = create_player_index(df)
-    for player, rows in player_index.items():
+    player_index = PlayerIndex(df)
+    for player, rows in player_index.index.items():
         for key, arr in arrays.items():
             for window in sliding_window_view(rows, min(seq_length, len(rows))):
                 containers[key].append(arr[window])
@@ -77,30 +85,26 @@ def create_player_specific_sequences(
 
 
 def create_match_specific_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):
+    """Create sequences combining both players' histories for each match."""
     print(f"Creating match sequences for {len(df)} matches...")
     containers = defaultdict(list)
     arrays = {}
     for col in keys:
         arrays[col] = df[col].values
 
-    player_index: PlayerIndex = create_player_index(df)
+    player_index = PlayerIndex(df)
+    # matchups = df[["winner_name", "loser_name"]].apply(frozenset)
 
-    for idx, row in df.iterrows():
-        player_1_matches = player_index.get_match_idx_by_player(row["winner_name"])
-        player_2_matches = player_index.get_match_idx_by_player(row["loser_name"])
+    for idx, row in tqdm.tqdm(
+        df.iterrows(), total=len(df), desc="Creating match sequences"
+    ):
+        match_sequence = player_index.get_matches_by_players(
+            row["winner_name"], row["loser_name"]
+        )
 
-        # player_1_career = player_index.get_match_sequence_by_player(row["winner_name"])
-        # player_2_career = player_index.get_match_sequence_by_player(row["loser_name"])
+        is_match_in_past = match_sequence < idx
+        unique_matches_before_this_match = match_sequence[is_match_in_past]
 
-        merged_rows = np.asarray(list(merge(player_1_matches, player_2_matches)))
-        unique_matches, unq_idx = np.unique(merged_rows, return_index=True)
-
-        is_validation = arrays["is_validation"][unique_matches]
-        is_match_in_past = unique_matches < idx
-        is_historic_not_validation = np.logical_and(is_match_in_past, ~is_validation)
-        unique_matches_before_this_match = unique_matches[is_match_in_past]
-
-        # merged_rows =
         merged_rows = np.concatenate([unique_matches_before_this_match, [idx]])[
             -seq_length:
         ]
@@ -110,6 +114,7 @@ def create_match_specific_sequences(df: pd.DataFrame, keys: List[str], seq_lengt
         containers["position_token"].append(np.arange(1, len(merged_rows) + 1))
 
     all_tokens = {}
+
     for key, container in tqdm.tqdm(
         containers.items(), desc="Creating match centric sequence tensors"
     ):

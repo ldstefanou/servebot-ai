@@ -1,10 +1,8 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 import torch
-import yaml
-from data.embeddings import apply_embeddings, create_embeddings
-from data.preprocess import prepare_df
+from data.embeddings import apply_embeddings
 from data.sequences import *
 from torch.utils.data import Dataset, Sampler
 
@@ -12,39 +10,32 @@ from torch.utils.data import Dataset, Sampler
 class TennisDataset(Dataset):
     def __init__(
         self,
-        config_path: str = "model_config.yaml",
-        seq_length: int = 512,
-        sample_size: int = None,
-        dataset_path: str = "data/atp_matches_all_levels.parquet",
-        sequence_type: str = "player",
-        source_filter: str = "all",
+        embeddings,
+        df: pd.DataFrame,
+        config,
+        training_mode: bool = True,
     ):
-        self.seq_length = seq_length
-        self.config_path = config_path
 
-        # Load config
-        with open(config_path, "r") as f:
-            self.config = yaml.safe_load(f)
-
-        self.embedders = self.config["embedders"]
-        self.columns = self.config["columns"]
+        self.seq_length = config["seq_length"]
+        self.columns = config["columns"]
 
         # Load data to create shared vocabulary
-        df = pd.read_parquet(dataset_path)
-        df = prepare_df(df, sample_size=sample_size, source_filter=source_filter)
 
-        self.embeddings = create_embeddings(df, self.embedders)
-        self._create_sequences(df, sequence_type)
+        self.embeddings = embeddings
+        self.training_mode = training_mode
+        self.sequence_type = config["sequence_type"]
+        self.config = config  # Store config for saving
+        self._create_sequences(df)
 
-    def _create_sequences(self, df: pd.DataFrame, sequence_type: str) -> List[Dict]:
+    def _create_sequences(self, df: pd.DataFrame):
         df = apply_embeddings(df, self.embeddings)
         # Use ALL data for sequences (train + validation)
 
-        if sequence_type == "temporal":
+        if self.sequence_type == "temporal":
             sequences = create_sliding_window_sequences(
                 df, self.columns, self.seq_length
             )
-        elif sequence_type == "match":
+        elif self.sequence_type == "match":
             sequences = create_match_specific_sequences(
                 df, self.columns, self.seq_length
             )
@@ -92,49 +83,38 @@ class TennisDataset(Dataset):
         player_1 = batch["winner_name_token"]
         batch["is_padding"] = player_1.eq(0)
 
+        # Create target tensor (2 = left player wins, 0 = padding)
+        batch["target"] = torch.zeros_like(batch["winner_name_token"])
+        batch["target"].masked_fill_(~batch["is_padding"], 1)
+
         # Only swap non-padding positions
         non_padding_mask = ~batch["is_padding"]
-        swap_batch_keys(batch, swap_pairs, mask=non_padding_mask)
+        if self.training_mode:
+            swap_batch_keys(batch, swap_pairs, mask=non_padding_mask)
         loss_mask = torch.logical_and(~batch["is_validation"], ~batch["is_padding"])
         batch["loss_mask"] = loss_mask
         return batch
 
     def save_model_artifacts(self, model, save_dir="model_artifacts"):
         import pickle
-        import shutil
         from pathlib import Path
 
         import torch
+        import yaml
 
         save_path = Path(save_dir)
         save_path.mkdir(exist_ok=True)
 
         torch.save(model.state_dict(), save_path / "model_weights.pt")
-        shutil.copy(self.config_path, save_path / "model_config.yaml")
+
+        # Save config dict as yaml
+        with open(save_path / "model_config.yaml", "w") as f:
+            yaml.dump(self.config, f)
 
         with open(save_path / "embeddings.pkl", "wb") as f:
             pickle.dump(self.embeddings, f)
 
         return save_path
-
-
-class TrainSampler(Sampler):
-    def __init__(self, dataset):
-        import random
-
-        # Get all is_validation tensors and find sequences with NO validation examples
-        all_is_val = torch.stack(
-            [dataset[i]["is_validation"] for i in range(len(dataset))]
-        )
-        has_val = all_is_val.any(dim=1)
-        self.train_indices = (~has_val).nonzero(as_tuple=True)[0].tolist()
-        random.shuffle(self.train_indices)
-
-    def __iter__(self):
-        return iter(self.train_indices)
-
-    def __len__(self):
-        return len(self.train_indices)
 
 
 class ValSampler(Sampler):
@@ -151,7 +131,10 @@ class ValSampler(Sampler):
 
 
 def swap_batch_keys(
-    batch: Dict, swap_pairs: List[tuple], prob: float = 0.5, mask: torch.Tensor = None
+    batch: Dict,
+    swap_pairs: List[tuple],
+    prob: float = 0.5,
+    mask: Optional[torch.Tensor] = None,
 ):
     """
     Randomly swap specified key pairs in batch with given probability per sequence position.
@@ -185,5 +168,5 @@ def swap_batch_keys(
 
     # Flip targets: 2->1 for swapped positions (non-swapped stay as 2)
     batch["target"][swap_mask] = torch.where(
-        batch["target"][swap_mask] == 2, 1, batch["target"][swap_mask]
+        batch["target"][swap_mask] == 1, 0, batch["target"][swap_mask]
     )

@@ -2,13 +2,16 @@ import argparse
 
 import torch
 import torch.nn.functional as F
+import tqdm
 from data.dataset import TennisDataset, ValSampler
-from data.utils import print_calibration_table, print_sequence_results
+from data.embeddings import create_embeddings
+from data.preprocess import load_data, set_validation_matches
 
 # Read transformer model from yaml
+from metrics import log_loss, print_calibration_table, print_sequence_results
 from model.servebot import TennisTransformer
-from model.transformer import TransformerLLM
-from paths import get_dataset_path, save_model_artifacts
+from model.transformer import Transformer
+from paths import save_model_artifacts
 from torch.utils.data import DataLoader
 
 
@@ -58,7 +61,6 @@ def update_loss(out, batch, optim, scheduler):
     losses = F.cross_entropy(
         out.reshape(-1, out.shape[-1]),
         batch["target"].reshape(-1),
-        ignore_index=0,
         reduction="none",
     ).reshape(
         out.shape[0], -1
@@ -87,32 +89,23 @@ if __name__ == "__main__":
         choices=["all", "atp"],
         help="Dataset: all (all_levels) or atp (combined)",
     )
-    parser.add_argument(
-        "--sequence-type",
-        type=str,
-        default="player",
-        choices=["player", "temporal", "match"],
-        help="Sequence structure: player (player-specific), temporal (chronological sliding window), or match (combined player histories per match)",
-    )
+
     args = parser.parse_args()
 
     # Create model
-    base_model = TransformerLLM.from_yaml("model_config.yaml")
+    base_model = Transformer.from_yaml("model_config.yaml")
 
     # Select dataset file
-    dataset_path = get_dataset_path(args.dataset)
-    print(f"Using dataset: {dataset_path}")
+    df = load_data(sample=args.sample, filter_matches=args.dataset)
+    embeddings = create_embeddings(df, base_model.config["embedders"])
+    df = set_validation_matches(df)
 
     # Create train dataset
     train_dataset = TennisDataset(
-        config_path="model_config.yaml",
-        seq_length=base_model.config["seq_length"],
-        sample_size=args.sample,
-        dataset_path=dataset_path,
-        sequence_type=args.sequence_type,
-        source_filter=args.dataset,
+        embeddings=embeddings,
+        df=df,
+        config=base_model.config,
     )
-    print(f"Using sequence type: {args.sequence_type}")
 
     val_sampler = ValSampler(train_dataset)
 
@@ -133,24 +126,38 @@ if __name__ == "__main__":
 
     model = TennisTransformer(
         config=base_model.config,
-        embeddings=train_dataset.embeddings,
-        target_size=train_dataset.target_size,
+        embeddings=embeddings,
     )
     # Training loop
-    optim = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optim, T_max=args.epochs * len(dl)
     )
 
-    for ep in range(args.epochs):
-        model.train()
-        for i, batch in enumerate(dl):
-            out = model(batch)
-            loss = update_loss(out, batch, optim, scheduler)
-            log_loss(loss, out, batch, ep, i, len(dl), scheduler.get_last_lr()[0])
+    # Calculate total steps for progress bar
+    total_steps = args.epochs * len(dl)
 
-        validate(model, val_dataloader)
+    with tqdm.tqdm(total=total_steps, desc="Training Progress") as pbar:
+        for ep in range(args.epochs):
+            model.train()
+            for i, batch in enumerate(dl):
+                out = model(batch)
+                loss = update_loss(out, batch, optim, scheduler)
+                log_loss(loss, out, batch, ep, i, len(dl), scheduler.get_last_lr()[0])
 
-        # Save model after each epoch
-        save_path = save_model_artifacts(train_dataset, model, f"epoch_{ep}")
-        print(f"Model saved to {save_path}")
+                # Update progress bar
+                pbar.update(1)
+                pbar.set_postfix(
+                    {
+                        "Epoch": f"{ep+1}/{args.epochs}",
+                        "Batch": f"{i+1}/{len(dl)}",
+                        "Loss": f"{loss.item():.4f}",
+                        "LR": f"{scheduler.get_last_lr()[0]:.2e}",
+                    }
+                )
+
+            validate(model, val_dataloader)
+
+            # Save model after each epoch
+            save_path = save_model_artifacts(train_dataset, model, f"epoch_{ep}")
+            print(f"Model saved to {save_path}")
