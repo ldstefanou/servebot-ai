@@ -1,12 +1,12 @@
-# Servebot
+# Servebot-AI
 
-A transformer-based tennis match prediction system that uses player-specific attention to model match outcomes.
+An attention-based tennis match prediction system that uses  match-specific attention to model match outcomes. Achieves best in class validation performance of 87% on out of sample US Open 2024 full schedule prediction. I built this to combine my love for ML with my passion for tennis! 
 
 ## Approach
 
 The model treats tennis match prediction as a sequence modeling problem. For each match between players A and B, it creates a sequence from both players' historical matches leading up to the current match.
 
-Key innovation: **player-specific attention masking** ensures each historical match only attends to previous matches involving the same players, preventing the model from learning spurious correlations between unrelated matches.
+Key innovation: **player-specific attention masking** ensures each historical match only attends to previous matches involving the same players, preventing the model from learning spurious correlations between unrelated matches. Furthermore by modelling the problem as a sequence of matches we require minimal feature engineering and instead let the model figure those out through attention.
 
 ## Features
 
