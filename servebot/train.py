@@ -96,7 +96,7 @@ if __name__ == "__main__":
     base_model = Transformer.from_yaml("model_config.yaml")
 
     # Select dataset file
-    df = load_data(sample=args.sample, filter_matches=args.dataset)
+    df = load_data(sample=args.sample, filter_matches=base_model.config["dataset"])
     embeddings = create_embeddings(df, base_model.config["embedders"])
     df = set_validation_matches(df)
 
@@ -112,14 +112,14 @@ if __name__ == "__main__":
     # Create dataloaders
     dl = DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=base_model.config["batch_size"],
         shuffle=True,
         num_workers=0,
     )
 
     val_dataloader = DataLoader(
         train_dataset,
-        batch_size=args.batch_size,
+        batch_size=base_model.config["batch_size"],
         sampler=val_sampler,
         num_workers=0,
     )
