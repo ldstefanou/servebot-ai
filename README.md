@@ -1,4 +1,4 @@
-# Servebot-AI
+# 🎾 Servebot-AI 🎾
 
 An attention-based tennis match prediction system that uses  match-specific attention to model match outcomes. Achieves best in class validation performance of 87% on out of sample US Open 2024 full schedule prediction. I built this to combine my love for ML with my passion for tennis! 
 
