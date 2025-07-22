@@ -1,6 +1,8 @@
 # Global model configuration
 sequence_type: "match"
-batch_size: 300
+batch_size: 32
+epochs: 5
+dataset: "atp"
 
 d_model: 128
 seq_length: 128
