@@ -29,6 +29,7 @@ class TennisDataset(Dataset):
 
     def _create_sequences(self, df: pd.DataFrame):
         df = apply_embeddings(df, self.embeddings)
+        index = PlayerIndex(df)
         # Use ALL data for sequences (train + validation)
 
         if self.sequence_type == "temporal":
@@ -37,7 +38,7 @@ class TennisDataset(Dataset):
             )
         elif self.sequence_type == "match":
             sequences = create_match_specific_sequences(
-                df, self.columns, self.seq_length
+                df, index, self.columns, self.seq_length
             )
         else:  # default to player
             sequences = create_player_specific_sequences(
@@ -83,9 +84,8 @@ class TennisDataset(Dataset):
         player_1 = batch["winner_name_token"]
         batch["is_padding"] = player_1.eq(0)
 
-        # Create target tensor (2 = left player wins, 0 = padding)
+        # Create target tensor (0 = left player wins, 1 = padding)
         batch["target"] = torch.zeros_like(batch["winner_name_token"])
-        batch["target"].masked_fill_(~batch["is_padding"], 1)
 
         # Only swap non-padding positions
         non_padding_mask = ~batch["is_padding"]
@@ -166,7 +166,7 @@ def swap_batch_keys(
             batch[key1][swap_mask],
         )
 
-    # Flip targets: 2->1 for swapped positions (non-swapped stay as 2)
+    # Flip targets: 0->1 for swapped positions (non-swapped stay as 0)
     batch["target"][swap_mask] = torch.where(
-        batch["target"][swap_mask] == 1, 0, batch["target"][swap_mask]
+        batch["target"][swap_mask] == 0, 1, batch["target"][swap_mask]
     )

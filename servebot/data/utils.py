@@ -1,8 +1,24 @@
+import random
 from collections import defaultdict
 from heapq import merge
 
+import numpy as np
 import torch
 from torch.nn.utils.rnn import pad_sequence
+
+# Set seeds for reproducibility
+
+
+def set_seed():
+    SEED = 42
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    torch.cuda.manual_seed(SEED)
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    print("Seeds set")
 
 
 def merge_dicts_sorted(d1, d2) -> dict[str, list[int]]:

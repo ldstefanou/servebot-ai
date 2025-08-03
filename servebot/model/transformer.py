@@ -4,27 +4,21 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
+from model.forget import ForgettingTransformerBlock
 
 
 class AttentionHead(nn.Module):
     def __init__(self, config: Dict[str, Any]):
         super().__init__()
+        self.dropout_p = config["dropout"]
         self.qkv = nn.Linear(config["d_model"], config["d_attention"] * 3, bias=False)
+        self.forward = torch.compile(self._forward)
 
-    def forward(self, x, attn_mask=None):
+    def _forward(self, x, attn_mask=None):
         q, k, v = self.qkv(x).chunk(3, dim=-1)
-
-        # Create causal mask
-        seq_len = x.size(1)
-        causal_mask = torch.tril(
-            torch.ones(seq_len, seq_len, device=x.device, dtype=torch.bool)
+        return F.scaled_dot_product_attention(
+            q, k, v, attn_mask=attn_mask, dropout_p=self.dropout_p
         )
-
-        # Combine with attention mask if provided
-        if attn_mask is None:
-            attn_mask = causal_mask
-
-        return F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
 
 
 class MLP(nn.Module):
@@ -50,7 +44,11 @@ class TransformerBlock(nn.Module):
         d_attention = d_model // n_heads
 
         # Build attention heads
-        head_config = {"d_model": d_model, "d_attention": d_attention}
+        head_config = {
+            "d_model": d_model,
+            "d_attention": d_attention,
+            "dropout": global_config["dropout"],
+        }
         self.heads = nn.ModuleList([AttentionHead(head_config) for _ in range(n_heads)])
 
         # Build MLP
@@ -94,7 +92,11 @@ class Transformer(nn.Module):
         self.blocks = nn.ModuleList()
         for key, block_config in config.items():
             if key.startswith("block_"):
-                self.blocks.append(TransformerBlock(block_config, global_config))
+                self.blocks.append(
+                    ForgettingTransformerBlock(
+                        global_config["d_model"], block_config["n_heads"]
+                    )
+                )
 
     @classmethod
     def from_yaml(cls, yaml_path: str):

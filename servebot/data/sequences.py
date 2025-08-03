@@ -1,4 +1,5 @@
 from collections import defaultdict
+from functools import cached_property
 from heapq import merge
 from typing import List
 
@@ -18,6 +19,17 @@ class PlayerIndex:
         self.index = merge_dicts_sorted(winner_matches, loser_matches)
         self.df = df
 
+    def get_last_value_for_player(self, player: str, key: str):
+        vals = self.index[player]
+        return self.df[key].iloc[vals[-1]]
+
+    @cached_property
+    def array_containers(self):
+        return {k: self.df[k].values for k in self.df.columns}
+
+    def get_values_for_idx(self, key, idx):
+        return self.array_containers[key][idx]
+
     @property
     def players(self):
         return list(self.index.keys())
@@ -30,10 +42,6 @@ class PlayerIndex:
         right = self.get_match_idx_by_player(player_2)
         merged = np.unique(list(merge(left, right)))
         return merged
-
-    def get_latest_player_statistic(self, player, key):
-        rows = self.get_match_idx_by_player(player)
-        return self.df.iloc[rows[-1]][key]
 
 
 def create_sliding_window_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):
@@ -84,19 +92,15 @@ def create_player_specific_sequences(
     return all_tokens
 
 
-def create_match_specific_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):
+def create_match_specific_sequences(
+    match_df: pd.DataFrame, player_index: PlayerIndex, keys: List[str], seq_length: int
+):
     """Create sequences combining both players' histories for each match."""
-    print(f"Creating match sequences for {len(df)} matches...")
+    print(f"Creating match sequences for {len(match_df)} matches...")
     containers = defaultdict(list)
-    arrays = {}
-    for col in keys:
-        arrays[col] = df[col].values
-
-    player_index = PlayerIndex(df)
-    # matchups = df[["winner_name", "loser_name"]].apply(frozenset)
 
     for idx, row in tqdm.tqdm(
-        df.iterrows(), total=len(df), desc="Creating match sequences"
+        match_df.iterrows(), total=len(match_df), desc="Creating match sequences"
     ):
         match_sequence = player_index.get_matches_by_players(
             row["winner_name"], row["loser_name"]
@@ -109,8 +113,8 @@ def create_match_specific_sequences(df: pd.DataFrame, keys: List[str], seq_lengt
             -seq_length:
         ]
 
-        for key, arr in arrays.items():
-            containers[key].append(arr[merged_rows])
+        for key in keys:
+            containers[key].append(player_index.get_values_for_idx(key, merged_rows))
         containers["position_token"].append(np.arange(1, len(merged_rows) + 1))
 
     all_tokens = {}

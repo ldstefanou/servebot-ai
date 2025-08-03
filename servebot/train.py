@@ -2,12 +2,12 @@ import argparse
 
 import torch
 import torch.nn.functional as F
-import tqdm
 from data.dataset import TennisDataset, ValSampler
 from data.embeddings import create_embeddings
 from data.preprocess import load_data, set_validation_matches
 
 # Read transformer model from yaml
+from data.utils import set_seed
 from metrics import log_loss, print_calibration_table, print_sequence_results
 from model.servebot import TennisTransformer
 from model.transformer import Transformer
@@ -57,7 +57,7 @@ def validate(model, val_dl):
     print("=" * 80)
 
 
-def update_loss(out, batch, optim, scheduler):
+def update_loss(out, batch):
     losses = F.cross_entropy(
         out.reshape(-1, out.shape[-1]),
         batch["target"].reshape(-1),
@@ -69,42 +69,38 @@ def update_loss(out, batch, optim, scheduler):
     weighted_losses = losses * batch["loss_mask"]
     loss = weighted_losses.sum() / batch["loss_mask"].sum()
     loss.backward()
-    optim.step()
-    scheduler.step()
-    optim.zero_grad()
     return loss
 
 
 if __name__ == "__main__":
+    set_seed()
     parser = argparse.ArgumentParser(description="Tennis prediction training")
     parser.add_argument(
         "--sample", type=int, default=None, help="Use only N samples for dry run"
     )
-    parser.add_argument("--epochs", type=int, default=5, help="Number of epochs")
-    parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument(
-        "--dataset",
-        type=str,
-        default="all",
-        choices=["all", "atp"],
-        help="Dataset: all (all_levels) or atp (combined)",
+        "--last", type=int, default=None, help="Use only last N samples for dryrun"
     )
 
     args = parser.parse_args()
 
+    if args.last and args.sample:
+        raise ValueError("Cannot set both sample and last, pick one")
+
     # Create model
     base_model = Transformer.from_yaml("model_config.yaml")
+    config = base_model.config
 
     # Select dataset file
-    df = load_data(sample=args.sample, filter_matches=base_model.config["dataset"])
-    embeddings = create_embeddings(df, base_model.config["embedders"])
+    df = load_data(sample=args.sample, last=args.last, filter_matches=config["dataset"])
+    embeddings = create_embeddings(df, config["embedders"])
     df = set_validation_matches(df)
 
     # Create train dataset
     train_dataset = TennisDataset(
         embeddings=embeddings,
         df=df,
-        config=base_model.config,
+        config=config,
     )
 
     val_sampler = ValSampler(train_dataset)
@@ -112,52 +108,42 @@ if __name__ == "__main__":
     # Create dataloaders
     dl = DataLoader(
         train_dataset,
-        batch_size=base_model.config["batch_size"],
+        batch_size=config["batch_size"],
         shuffle=True,
-        num_workers=0,
     )
 
     val_dataloader = DataLoader(
         train_dataset,
-        batch_size=base_model.config["batch_size"],
+        batch_size=config["batch_size"],
         sampler=val_sampler,
-        num_workers=0,
     )
 
     model = TennisTransformer(
-        config=base_model.config,
+        config=config,
         embeddings=embeddings,
     )
+
     # Training loop
     optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optim, T_max=args.epochs * len(dl)
+        optim, T_max=config["epochs"] * len(dl)
     )
 
     # Calculate total steps for progress bar
-    total_steps = args.epochs * len(dl)
+    total_steps = config["epochs"] * len(dl)
 
-    with tqdm.tqdm(total=total_steps, desc="Training Progress") as pbar:
-        for ep in range(args.epochs):
-            model.train()
-            for i, batch in enumerate(dl):
-                out = model(batch)
-                loss = update_loss(out, batch, optim, scheduler)
-                log_loss(loss, out, batch, ep, i, len(dl), scheduler.get_last_lr()[0])
-
-                # Update progress bar
-                pbar.update(1)
-                pbar.set_postfix(
-                    {
-                        "Epoch": f"{ep+1}/{args.epochs}",
-                        "Batch": f"{i+1}/{len(dl)}",
-                        "Loss": f"{loss.item():.4f}",
-                        "LR": f"{scheduler.get_last_lr()[0]:.2e}",
-                    }
-                )
-
-            validate(model, val_dataloader)
-
-            # Save model after each epoch
-            save_path = save_model_artifacts(train_dataset, model, f"epoch_{ep}")
-            print(f"Model saved to {save_path}")
+    for ep in range(config["epochs"]):
+        model.train()
+        validate(model, val_dataloader)
+        for i, batch in enumerate(dl):
+            out = model(batch)
+            loss = update_loss(out, batch)
+            log_loss(loss, out, batch, ep, i, len(dl), scheduler.get_last_lr()[0])
+            optim.step()
+            scheduler.step()
+            optim.zero_grad()
+        # Save model after each epoch
+        save_path = save_model_artifacts(
+            train_dataset, model, f"epoch_{ep}", optimizer=optim, scheduler=scheduler
+        )
+        print(f"Model saved to {save_path}")

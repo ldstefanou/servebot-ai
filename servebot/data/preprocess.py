@@ -5,29 +5,6 @@ import pandas as pd
 from paths import get_dataset_path
 
 
-def walk_back_split(df, target_validation_players=100):
-    validation_players = set()
-    validation_cutoff_idx = len(df)
-
-    # Walk backwards through the sorted dataframe
-    for idx, row in df[::-1].iterrows():
-        # Check if we'd add any new players
-        new_players = {row["winner_name"], row["loser_name"]} - validation_players
-
-        # Add the new players
-        validation_players.update(new_players)
-
-        # Stop when we have enough unique validation players
-        if len(validation_players) >= target_validation_players:
-            validation_cutoff_idx = idx
-            break
-
-    # Add validation flag
-    df["is_validation"] = df.index >= validation_cutoff_idx
-
-    return df
-
-
 def sample_df_by_match_id(df: pd.DataFrame, size: int):
     unique_matches = df["match_id"].unique()
     sampled_matches = np.random.choice(
@@ -177,7 +154,11 @@ def set_validation_matches(
     return df
 
 
-def load_data(sample: Optional[int] = None, filter_matches: str = "all"):
+def load_data(
+    sample: Optional[int] = None,
+    last: Optional[int] = None,
+    filter_matches: str = "all",
+):
     df = load_training_dataframe()
     df = clean_dataframe(df)
 
@@ -187,4 +168,6 @@ def load_data(sample: Optional[int] = None, filter_matches: str = "all"):
 
     if sample is not None:
         df = sample_df_by_match_id(df, sample)
+    if last is not None:
+        df = df.iloc[-last:].copy()
     return df
