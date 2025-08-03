@@ -7,7 +7,7 @@ from model.time_encoding import ContinuousTimeEncoding
 from model.transformer import Transformer
 
 
-def create_player_attention_mask(winner_tokens, loser_tokens):
+def create_player_attention_mask(winner_tokens, loser_tokens, position_tokens):
     """Create attention mask allowing only player-specific context.
 
     Each match can only attend to previous matches involving the same players,
@@ -20,6 +20,9 @@ def create_player_attention_mask(winner_tokens, loser_tokens):
     loser_tokens : torch.Tensor
         Loser player tokens, shape [batch, seq_len]
 
+    position_tokens : torch.Tensor
+        position tokens, shape [batch, seq_len]
+
     Returns
     -------
     torch.Tensor
@@ -27,10 +30,12 @@ def create_player_attention_mask(winner_tokens, loser_tokens):
     """
     batch_size, seq_len = winner_tokens.shape
 
-    # Create causal mask (only attend to previous positions)
-    causal_mask = torch.tril(
-        torch.ones(seq_len, seq_len, dtype=torch.bool), diagonal=-1
-    )
+    # Create position-based causal mask: attend to earlier positions + diagonal
+    pos_i = position_tokens.unsqueeze(2)  # [batch, seq_len, 1]
+    pos_j = position_tokens.unsqueeze(1)  # [batch, 1, seq_len]
+
+    # Allow attention to earlier positions (pos_j <= pos_i)
+    causal_mask = pos_j <= pos_i
 
     # Expand tokens for broadcasting
     winner_i = winner_tokens.unsqueeze(2)  # [batch, seq_len, 1]
@@ -47,8 +52,13 @@ def create_player_attention_mask(winner_tokens, loser_tokens):
     )
 
     # Combine with causal mask
-    attention_mask = same_player_mask & causal_mask
-
+    not_padding = winner_tokens.ne(0)
+    attention_mask = (
+        same_player_mask
+        & causal_mask
+        & not_padding.unsqueeze(1)
+        & not_padding.unsqueeze(2)
+    )
     return attention_mask
 
 
@@ -109,21 +119,10 @@ class TennisTransformer(Transformer):
 
         # Player embeddings with advantages
         left_player_emb = embeddings.pop("winner_name") + w_age
-        right_player_emb = embeddings.pop("loser_name") - l_age
+        right_player_emb = embeddings.pop("loser_name") + l_age
 
         left_player_rank = embeddings.pop("winner_rank")
         right_player_rank = embeddings.pop("loser_rank")
-
-        previous_winner = self.embedding_dict["player_name"](
-            batch["previous_winner_player"]
-        )
-
-        # Compute relationships to recent winner
-        left_to_winner_diff = left_player_emb - previous_winner
-        right_to_winner_diff = right_player_emb - previous_winner
-
-        # Now you have relational momentum signals
-        momentum_signal = left_to_winner_diff - right_to_winner_diff
 
         # Relative strength
         rel_strength = left_player_emb - right_player_emb
@@ -142,18 +141,18 @@ class TennisTransformer(Transformer):
                 embeddings["surface"],
                 embeddings["round"],
                 embeddings["tournament"],
-                momentum_signal,
             ],
-            dim=-2,
+            dim=-1,
         )
-
-        x = features.mean(2) + pos + time
+        x = features.mean(-1)
         attention_mask = create_player_attention_mask(
-            batch[f"winner_name_token"], batch[f"loser_name_token"]
+            batch[f"winner_name_token"],
+            batch[f"loser_name_token"],
+            batch["position_token"],
         )
         # Apply transformer blocks
         for block in self.blocks:
-            x = block(x, attention_mask)
+            x = block(x + time, attention_mask)
 
         return self.to_pred(x)
 

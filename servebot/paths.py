@@ -24,7 +24,9 @@ def get_model_path(model_name="latest"):
     return MODELS_DIR / f"model_{model_name}"
 
 
-def save_model_artifacts(dataset, model, model_name="latest"):
+def save_model_artifacts(
+    dataset, model, model_name="latest", optimizer=None, scheduler=None
+):
     import pickle
 
     import torch
@@ -41,5 +43,12 @@ def save_model_artifacts(dataset, model, model_name="latest"):
 
     with open(save_path / "embeddings.pkl", "wb") as f:
         pickle.dump(dataset.embeddings, f)
+
+    # Save optimizer and scheduler state if provided
+    if optimizer is not None:
+        torch.save(optimizer.state_dict(), save_path / "optimizer.pt")
+
+    if scheduler is not None:
+        torch.save(scheduler.state_dict(), save_path / "scheduler.pt")
 
     return save_path

@@ -58,14 +58,13 @@ def log_loss(
     avg_val_acc = total_val_correct / (total_val_seen + 1e-8)
 
     print(
-        f"Epoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f}, LR: {lr:.6f}"
+        f"Epoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f} ({total_val_correct}/{total_val_seen}), LR: {lr:.6f}"
     )
 
 
 def print_sequence_results(batch: dict, out, mappings: dict):
     # random sequence from batch
     for rnd in range(out.shape[0]):
-
         sequence_length = (~batch["is_padding"]).cumsum(dim=1).argmax(-1)[rnd] + 1
         decoded = decode_batch_of_embeddings(batch, mappings)
 
@@ -97,8 +96,8 @@ def print_sequence_results(batch: dict, out, mappings: dict):
             else:
                 match_emoji = "📝"  # Training context match (provides context)
 
-            pred_winner = "L" if pred == 2 else "R"
-            true_winner = "L" if target == 2 else "R"
+            pred_winner = "L" if pred == 0 else "R"
+            true_winner = "L" if target == 0 else "R"
 
             left_player = f"{match_emoji} {left_p[i]}-{left_rank[i]} ({left_age[i]})"
             right_player = f"{right_p[i]}-{right_rank[i]} ({right_age[i]})"

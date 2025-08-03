@@ -122,6 +122,7 @@ if __name__ == "__main__":
         config=config,
         embeddings=embeddings,
     )
+
     # Training loop
     optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -132,8 +133,8 @@ if __name__ == "__main__":
     total_steps = config["epochs"] * len(dl)
 
     for ep in range(config["epochs"]):
-        validate(model, val_dataloader)
         model.train()
+        validate(model, val_dataloader)
         for i, batch in enumerate(dl):
             out = model(batch)
             loss = update_loss(out, batch)
@@ -141,7 +142,8 @@ if __name__ == "__main__":
             optim.step()
             scheduler.step()
             optim.zero_grad()
-
         # Save model after each epoch
-        save_path = save_model_artifacts(train_dataset, model, f"epoch_{ep}")
+        save_path = save_model_artifacts(
+            train_dataset, model, f"epoch_{ep}", optimizer=optim, scheduler=scheduler
+        )
         print(f"Model saved to {save_path}")
