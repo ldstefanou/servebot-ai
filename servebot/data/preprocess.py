@@ -5,6 +5,13 @@ import pandas as pd
 from paths import get_dataset_path
 
 
+def load_training_dataframe():
+    df = pd.read_parquet(get_dataset_path("all"))
+    df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
+    df = df.sort_values(["date", "tourney_id", "match_num"])
+    return df
+
+
 def sample_df_by_match_id(df: pd.DataFrame, size: int):
     unique_matches = df["match_id"].unique()
     sampled_matches = np.random.choice(
@@ -14,17 +21,8 @@ def sample_df_by_match_id(df: pd.DataFrame, size: int):
     return df
 
 
-def load_training_dataframe():
-    df = pd.read_parquet(get_dataset_path("all"))
-    df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
-    df["time_since_epoch"] = df["date"].astype("int64") // 10**9
-    df = df.sort_values(["date", "tourney_id", "match_num"])
-    return df
-
-
-def bin_categorical_features(df: pd.DataFrame):
+def bin_continuous_features(df: pd.DataFrame):
     """Create categorical bins for age, height, and rank features"""
-
     # Age binning - career stage bins
     df["winner_age"] = df["winner_age"].fillna(df["winner_age"].mean())
     df["loser_age"] = df["loser_age"].fillna(df["loser_age"].mean())
@@ -45,10 +43,6 @@ def bin_categorical_features(df: pd.DataFrame):
     df["loser_age_group"] = pd.cut(
         df["loser_age"], bins=age_bins, labels=age_labels
     ).astype(str)
-
-    # Height binning - clean outliers and create strategic bins
-    df["winner_ht"] = df["winner_ht"].replace(0, np.nan)  # Replace 0s with NaN
-    df["loser_ht"] = df["loser_ht"].replace(0, np.nan)
 
     # Filter out clearly wrong heights (< 150cm or > 220cm)
     df.loc[df["winner_ht"] < 150, "winner_ht"] = np.nan
@@ -96,9 +90,10 @@ def bin_categorical_features(df: pd.DataFrame):
     return df
 
 
-def clean_dataframe(df: pd.DataFrame):
+def preprocess_dataframe(df: pd.DataFrame):
     # time stuff
     df["year"] = df["date"].dt.year
+    df["time_since_epoch"] = df["date"].astype("int64") // 10**9
 
     # h2h scores
     sets = df[["winner_name", "loser_name"]].apply(frozenset, axis=1)
@@ -106,18 +101,20 @@ def clean_dataframe(df: pd.DataFrame):
     df["h2h_loser_player"] = df.groupby(sets).cumcount() - df["h2h_winner_player"]
 
     # match id
-    df["match_id"] = np.arange(df.shape[0])
+    df["match_id"] = np.arange(1, df.shape[0] + 1)
 
     # Apply categorical binning
-    df = bin_categorical_features(df)
+    df = bin_continuous_features(df)
 
-    df["year"] = df["date"].dt.year
+    # clean tournament name
     df["tourney_str"] = (
         df["tourney_name"].str.split(" ").apply(lambda x: " ".join(x[:4]))
     )
+
     biggest_tourney = (
         df["tourney_str"].value_counts().sort_values(ascending=False)[:100]
     )
+
     df["tournament"] = np.where(
         df["tourney_str"].isin(biggest_tourney.index),
         df["tourney_str"],
@@ -154,13 +151,40 @@ def set_validation_matches(
     return df
 
 
+def get_grand_slam_match_indexes(df: pd.DataFrame, slam_index: int = 0):
+    """
+    Get match_ids for a specific Grand Slam tournament.
+
+    Args:
+        df: The tennis dataframe (assumed to be sorted by date)
+        slam_index: Index of Grand Slam (0 = last/most recent, 1 = second to last, etc.)
+
+    Returns:
+        List of match_ids that belong to the selected Grand Slam
+    """
+    # Define Grand Slam names
+    grand_slams = ["australian open", "roland garros", "wimbledon", "us open"]
+
+    # Filter by Grand Slams and group by tournament
+    is_slam = df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
+    slam_groups = df[is_slam].groupby(["tourney_id", "year"])
+
+    # Get the n-th group from the end
+    group_keys = list(slam_groups.groups.keys())
+    selected_tourney_id = group_keys[-(slam_index + 1)]
+
+    # Return all match_ids for this tournament
+    return slam_groups.get_group(selected_tourney_id)["match_id"].tolist()
+
+
 def load_data(
     sample: Optional[int] = None,
     last: Optional[int] = None,
+    from_year: Optional[int] = None,
     filter_matches: str = "all",
 ):
     df = load_training_dataframe()
-    df = clean_dataframe(df)
+    df = preprocess_dataframe(df)
 
     # Filter by match type
     if filter_matches == "atp":
@@ -170,4 +194,7 @@ def load_data(
         df = sample_df_by_match_id(df, sample)
     if last is not None:
         df = df.iloc[-last:].copy()
-    return df
+    if from_year is not None:
+        df = df[df["year"].ge(from_year)].copy()
+
+    return df.reset_index()

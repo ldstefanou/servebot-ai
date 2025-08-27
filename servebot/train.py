@@ -1,21 +1,19 @@
-import argparse
-
 import torch
 import torch.nn.functional as F
-from data.dataset import TennisDataset, ValSampler
-from data.embeddings import create_embeddings
-from data.preprocess import load_data, set_validation_matches
 
 # Read transformer model from yaml
-from data.utils import set_seed
-from metrics import log_loss, print_calibration_table, print_sequence_results
+from metrics import (
+    log_loss,
+    print_calibration_table,
+    print_sequence_results,
+    reset_metrics,
+)
 from model.servebot import TennisTransformer
-from model.transformer import Transformer
 from paths import save_model_artifacts
-from torch.utils.data import DataLoader
 
 
-def validate(model, val_dl):
+def validate(model: TennisTransformer, val_dl):
+    model.eval()
     val_correct_total = 0
     val_seen_total = 0
 
@@ -27,7 +25,7 @@ def validate(model, val_dl):
         for i, val_batch in enumerate(val_dl):
             out = model(val_batch)
             proba = out.softmax(-1)
-            print_sequence_results(val_batch, out, train_dataset.embeddings)
+            print_sequence_results(val_batch, out, model.embeddings)
 
             val_predictions = torch.argmax(out, dim=-1)
             val_targets = val_batch["target"]
@@ -55,6 +53,7 @@ def validate(model, val_dl):
 
     print_calibration_table(all_probas, all_correct)
     print("=" * 80)
+    return val_accuracy_clean
 
 
 def update_loss(out, batch):
@@ -72,78 +71,28 @@ def update_loss(out, batch):
     return loss
 
 
-if __name__ == "__main__":
-    set_seed()
-    parser = argparse.ArgumentParser(description="Tennis prediction training")
-    parser.add_argument(
-        "--sample", type=int, default=None, help="Use only N samples for dry run"
-    )
-    parser.add_argument(
-        "--last", type=int, default=None, help="Use only last N samples for dryrun"
-    )
-
-    args = parser.parse_args()
-
-    if args.last and args.sample:
-        raise ValueError("Cannot set both sample and last, pick one")
-
-    # Create model
-    base_model = Transformer.from_yaml("model_config.yaml")
-    config = base_model.config
-
-    # Select dataset file
-    df = load_data(sample=args.sample, last=args.last, filter_matches=config["dataset"])
-    embeddings = create_embeddings(df, config["embedders"])
-    df = set_validation_matches(df)
-
-    # Create train dataset
-    train_dataset = TennisDataset(
-        embeddings=embeddings,
-        df=df,
-        config=config,
-    )
-
-    val_sampler = ValSampler(train_dataset)
-
-    # Create dataloaders
-    dl = DataLoader(
-        train_dataset,
-        batch_size=config["batch_size"],
-        shuffle=True,
-    )
-
-    val_dataloader = DataLoader(
-        train_dataset,
-        batch_size=config["batch_size"],
-        sampler=val_sampler,
-    )
-
-    model = TennisTransformer(
-        config=config,
-        embeddings=embeddings,
-    )
-
+def train(tdl, vdl, config, embeddings):
     # Training loop
+    reset_metrics()
+    model = TennisTransformer(config, embeddings)
+
     optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optim, T_max=config["epochs"] * len(dl)
+        optim, T_max=config["epochs"] * len(tdl)
     )
-
-    # Calculate total steps for progress bar
-    total_steps = config["epochs"] * len(dl)
-
     for ep in range(config["epochs"]):
         model.train()
-        validate(model, val_dataloader)
-        for i, batch in enumerate(dl):
+        for i, batch in enumerate(tdl):
             out = model(batch)
             loss = update_loss(out, batch)
-            log_loss(loss, out, batch, ep, i, len(dl), scheduler.get_last_lr()[0])
+            log_loss(loss, out, batch, ep, i, len(tdl), scheduler.get_last_lr()[0])
             optim.step()
             scheduler.step()
             optim.zero_grad()
+        acc = validate(model, vdl)
         # Save model after each epoch
         save_path = save_model_artifacts(
-            train_dataset, model, f"epoch_{ep}", optimizer=optim, scheduler=scheduler
+            model, config, f"epoch_{ep}", optimizer=optim, scheduler=scheduler
         )
         print(f"Model saved to {save_path}")
+    return acc

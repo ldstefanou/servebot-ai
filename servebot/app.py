@@ -3,58 +3,18 @@ import pickle
 import pandas as pd
 import streamlit as st
 import torch
-from data.dataset import TennisDataset
+from data.dataset import SimpleDSet
+from data.embeddings import apply_encoders
 from data.preprocess import load_data
-from data.sequences import PlayerIndex
+from data.sequences import PlayerIndex, create_match_specific_sequences
 from model.servebot import TennisTransformer
-from torch.utils.data import DataLoader, SubsetRandomSampler
-
-
-def create_dataset(embeddings, bank, config):
-    config["seq_length"] = len(bank) + 1
-    dset = TennisDataset(embeddings, bank, config, training_mode=False)
-
-    # Use SubsetRandomSampler to get only the last sequence (most complete context)
-    last_idx = len(dset) - 1
-    sampler = SubsetRandomSampler([last_idx])
-    dloader = DataLoader(dset, batch_size=1, sampler=sampler)
-    batch = list(dloader)[0]
-
-    # UGLY FIX: Clip position tokens to model's trained range
-    batch["position_token"] = torch.clamp(batch["position_token"], max=128)
-
-    return batch
-
-
-def create_historical_bank(df, index: PlayerIndex, player_1: str, player_2: str):
-    bank_idx = index.get_matches_by_players(player_1, player_2)
-
-    filtered = df.iloc[bank_idx]
-    # Convert to records (list of dicts)
-    records = filtered.to_dict("records")
-
-    # Get last record and copy it
-    last_record = records[-1].copy()
-
-    # Update with new players
-    last_record["winner_name"] = player_1
-    last_record["loser_name"] = player_2
-
-    # Append to records
-    records.append(last_record)
-
-    # Convert back to dataframe
-    extended_df = pd.DataFrame(records).reset_index(drop=True)
-    extended_df["is_validation"] = False
-
-    return extended_df
 
 
 @st.cache_resource
 def load_model():
     """Load and cache the trained model and embeddings"""
     try:
-        model_path = "servebot/data/static/models/model_epoch_0"
+        model_path = "servebot/data/static/models/model_epoch_4"
 
         # Load embeddings
         with open(f"{model_path}/embeddings.pkl", "rb") as f:
@@ -73,21 +33,29 @@ def load_model():
 @st.cache_data
 def load_player_index(df):
     """Load unique players from the dataset"""
-    index = PlayerIndex(df)
-    return index
+    return PlayerIndex(df)
 
 
 st.title("🎾 Servebot")
 st.write("Select two players to predict match outcome")
 
+# model
+model, encoders = load_model()
+
+
 # load sequence bank
-df = load_data()
+df = load_data(filter_matches="atp")
+df = apply_encoders(df, encoders)
 
 # Load players
 index = load_player_index(df)
 
-# model
-model, embeddings = load_model()
+# match_df = index.create_match_for_players("Dennis Novak", "Novak Djokovic", encoders)
+# sequences = create_match_specific_sequences(match_df, index, model.config["columns"], model.config["seq_length"])
+# batch = torch.utils.data.DataLoader(SimpleDSet(sequences, training=False))
+# out = model(next(iter(batch)))
+
+# print(out.softmax(dim=-1))
 
 # Searchable dropdowns
 player1 = st.selectbox(
@@ -109,8 +77,15 @@ if st.button("Predict"):
             st.error("Please select different players!")
         else:
             with st.spinner("Generating prediction..."):
-                bank = create_historical_bank(df, index, player1, player2)
-                batch = create_dataset(embeddings, bank, model.config)
+                bank_idx = index.get_matches_by_players(player1, player2)
+                bank = index.df.iloc[bank_idx]
+                match_df = index.create_match_for_players(player1, player2, encoders)
+                sequences = create_match_specific_sequences(
+                    match_df, index, model.config["columns"], model.config["seq_length"]
+                )
+                batch = SimpleDSet(sequences, training=False)[0]
+                batch = {k: v.unsqueeze(0) for k, v in batch.items()}
+
                 with torch.no_grad():
                     out = model(batch)
                     probabilities = out.softmax(-1)
@@ -144,12 +119,8 @@ if st.button("Predict"):
 
                 # Show the prediction for the last position (most recent context)
                 last_prob = probabilities[0, -1]  # [batch=1, last_position, classes]
-                player1_win_prob = last_prob[
-                    1
-                ].item()  # Assuming class 1 is "player1 wins"
-                player2_win_prob = last_prob[
-                    0
-                ].item()  # Assuming class 0 is "player2 wins"
+                player1_win_prob = last_prob[0].item()
+                player2_win_prob = last_prob[1].item()
 
                 st.write("### Prediction:")
                 col1, col2 = st.columns(2)

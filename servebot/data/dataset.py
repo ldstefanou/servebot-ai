@@ -1,98 +1,63 @@
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-import pandas as pd
 import torch
-from data.embeddings import apply_embeddings
-from data.sequences import *
 from torch.utils.data import Dataset, Sampler
 
 
-class TennisDataset(Dataset):
-    def __init__(
-        self,
-        embeddings,
-        df: pd.DataFrame,
-        config,
-        training_mode: bool = True,
-    ):
+class SimpleDSet(Dataset):
+    def __init__(self, sequences, training: bool = True):
+        self.training = training
+        self.sequences = sequences
 
-        self.seq_length = config["seq_length"]
-        self.columns = config["columns"]
+    def __len__(self):
+        return len(list(self.sequences.values())[0])
 
-        # Load data to create shared vocabulary
+    def set_validation_mask(self, match_id):
+        self.sequences["is_validation"] = self.sequences["match_id"].ge(match_id)
 
-        self.embeddings = embeddings
-        self.training_mode = training_mode
-        self.sequence_type = config["sequence_type"]
-        self.config = config  # Store config for saving
-        self._create_sequences(df)
-
-    def _create_sequences(self, df: pd.DataFrame):
-        df = apply_embeddings(df, self.embeddings)
-        index = PlayerIndex(df)
-        # Use ALL data for sequences (train + validation)
-
-        if self.sequence_type == "temporal":
-            sequences = create_sliding_window_sequences(
-                df, self.columns, self.seq_length
-            )
-        elif self.sequence_type == "match":
-            sequences = create_match_specific_sequences(
-                df, index, self.columns, self.seq_length
-            )
-        else:  # default to player
-            sequences = create_player_specific_sequences(
-                df, self.columns, self.seq_length
-            )
-
-        for key, seq in sequences.items():
-            setattr(self, key, seq)
-            self.size = len(seq)
-
-    def __len__(self) -> int:
-        return self.size
-
-    @property
-    def target_size(self):
-        return getattr(self, "target").max() + 1
-
-    def __getitem__(self, idx: int) -> Dict:
-        # loss mask should be one where the loss should be backpropagated.
-        # In our case that is the last match ;expect when its the validation match
-        batch = {
-            key: getattr(self, key)[idx].clone() for key in self.columns
-        }  # Clone to avoid in-place modification
-        batch["is_validation"] = batch["is_validation"].bool()
-        batch["position_token"] = getattr(self, "position_token")[idx]
-
-        # Add previous winner player context (before swapping)
-        batch["previous_winner_player"] = torch.cat(
-            [
-                torch.zeros(1, dtype=batch["winner_name_token"].dtype),
-                batch["winner_name_token"][:-1],
-            ]
+    def set_validation_mask_by_indexes(self, match_indexes):
+        """Set validation mask based on specific match indexes from the original dataframe"""
+        # Create a boolean mask for validation matches
+        validation_match_mask = torch.zeros_like(
+            self.sequences["match_id"], dtype=torch.bool
         )
 
-        # Define what keys to swap when flipping left/right players
-        swap_pairs = [
-            ("winner_name_token", "loser_name_token"),
-            ("h2h_winner_player", "h2h_loser_player"),
-            ("winner_hand_token", "loser_hand_token"),
-            ("winner_age", "loser_age"),
-            ("winner_rank_token", "loser_rank_token"),
-        ]
-        player_1 = batch["winner_name_token"]
-        batch["is_padding"] = player_1.eq(0)
+        # Find sequence positions that contain any of the validation match indexes
+        for match_idx in match_indexes:
+            validation_match_mask |= self.sequences["match_id"].eq(match_idx)
 
-        # Create target tensor (0 = left player wins, 1 = padding)
-        batch["target"] = torch.zeros_like(batch["winner_name_token"])
+        # Determine padding (non-padded positions)
+        non_padded = self.sequences["winner_name_token"].ne(0)
 
-        # Only swap non-padding positions
-        non_padding_mask = ~batch["is_padding"]
-        if self.training_mode:
-            swap_batch_keys(batch, swap_pairs, mask=non_padding_mask)
-        loss_mask = torch.logical_and(~batch["is_validation"], ~batch["is_padding"])
-        batch["loss_mask"] = loss_mask
+        # Find the last non-padded position for each sequence
+        last_valid_pos = non_padded.flip(dims=[1]).long().argmax(dim=1)
+        last_valid_pos = non_padded.size(1) - 1 - last_valid_pos
+
+        # Check if the last non-padded position is a validation match
+        batch_indices = torch.arange(validation_match_mask.size(0))
+        last_pos_is_validation = validation_match_mask[batch_indices, last_valid_pos]
+
+        # Only return sequences where the last valid match is a validation match
+        valid_sequence_indices = last_pos_is_validation.nonzero(as_tuple=True)[
+            0
+        ].tolist()
+
+        # Set validation mask for all positions after validation matches start
+        self.sequences["is_validation"] = (
+            validation_match_mask.cumsum(dim=1).gt(0) & non_padded
+        )
+
+        return valid_sequence_indices
+
+    def __getitem__(self, idx):
+        batch = {k: v[idx].clone() for k, v in self.sequences.items()}
+        if self.training:
+            batch["is_padding"] = batch["winner_name_token"].eq(0)
+            batch["loss_mask"] = torch.logical_and(
+                ~batch["is_padding"], ~batch["is_validation"]
+            )
+            batch["target"] = torch.zeros_like(batch["winner_name_token"])
+            swap_batch_keys(batch, mask=~batch["is_padding"])
         return batch
 
     def save_model_artifacts(self, model, save_dir="model_artifacts"):
@@ -132,7 +97,6 @@ class ValSampler(Sampler):
 
 def swap_batch_keys(
     batch: Dict,
-    swap_pairs: List[tuple],
     prob: float = 0.5,
     mask: Optional[torch.Tensor] = None,
 ):
@@ -145,9 +109,9 @@ def swap_batch_keys(
         prob: Probability of swapping each position
         mask: Boolean mask for positions to consider for swapping
     """
-    if not swap_pairs:
-        return
-
+    swap_pairs = [
+        (k, k.replace("winner", "loser")) for k in batch.keys() if "winner" in k
+    ]
     # Get sequence length from first key
     first_key = next(iter(batch.keys()))
     seq_len = batch[first_key].shape[0]

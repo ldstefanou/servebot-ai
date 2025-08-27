@@ -1,7 +1,7 @@
 # Global model configuration
 sequence_type: "match"
 batch_size: 64
-epochs: 10
+epochs: 5
 dataset: "atp"
 
 d_model: 128
@@ -24,9 +24,9 @@ columns: [
   "round_token",
   "h2h_winner_player",
   "h2h_loser_player",
-  "is_validation",
   "winner_age",
   "loser_age",
+  "match_id"
 ]
 
 # Architecture definition

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 
-def create_embeddings(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, int]]:
+def create_encoders(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, int]]:
     """Create token mappings for categorical features.
 
     Parameters
@@ -36,7 +36,7 @@ def create_embeddings(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, 
     return embeddings
 
 
-def apply_embeddings(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
+def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     """Apply token mappings to dataframe columns.
 
     Parameters
@@ -66,7 +66,7 @@ def apply_embeddings(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     df[token_columns] = (
         df[token_columns].fillna(0).astype({k: "int" for k in token_columns})
     )
-    return df.dropna(subset=token_columns).reset_index(drop=True)
+    return df.dropna(subset=token_columns)
 
 
 def decode_batch_of_embeddings(

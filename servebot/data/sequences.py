@@ -1,47 +1,12 @@
 from collections import defaultdict
-from functools import cached_property
-from heapq import merge
 from typing import List
 
 import numpy as np
 import pandas as pd
 import tqdm
-from data.utils import merge_dicts_sorted, truncate_and_pad_to_long_tensor
+from data.utils import truncate_and_pad_to_long_tensor
+from model.index import PlayerIndex
 from numpy.lib.stride_tricks import sliding_window_view
-
-
-class PlayerIndex:
-    def __init__(self, df: pd.DataFrame):
-        df = df.reset_index(drop=True)
-
-        winner_matches = df.groupby("winner_name").indices
-        loser_matches = df.groupby("loser_name").indices
-        self.index = merge_dicts_sorted(winner_matches, loser_matches)
-        self.df = df
-
-    def get_last_value_for_player(self, player: str, key: str):
-        vals = self.index[player]
-        return self.df[key].iloc[vals[-1]]
-
-    @cached_property
-    def array_containers(self):
-        return {k: self.df[k].values for k in self.df.columns}
-
-    def get_values_for_idx(self, key, idx):
-        return self.array_containers[key][idx]
-
-    @property
-    def players(self):
-        return list(self.index.keys())
-
-    def get_match_idx_by_player(self, player: str):
-        return self.index[player]
-
-    def get_matches_by_players(self, player_1: str, player_2: str):
-        left = self.get_match_idx_by_player(player_1)
-        right = self.get_match_idx_by_player(player_2)
-        merged = np.unique(list(merge(left, right)))
-        return merged
 
 
 def create_sliding_window_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):
@@ -123,5 +88,4 @@ def create_match_specific_sequences(
         containers.items(), desc="Creating match centric sequence tensors"
     ):
         all_tokens[key] = truncate_and_pad_to_long_tensor(container, seq_length)
-
     return all_tokens
