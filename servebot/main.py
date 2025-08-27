@@ -23,6 +23,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--from-year", type=int, default=None, help="Use sample from year x onwards"
     )
+    parser.add_argument(
+        "--validation-leak-test",
+        action="store_true",
+        help="Flip match outcomes for validation leak test",
+    )
 
     args = parser.parse_args()
 
@@ -64,6 +69,8 @@ if __name__ == "__main__":
             Subset(dset, val_indices),
             batch_size=64,
         )
-        val_score = train(tdl, vdl, config, encoders)
+        val_score = train(
+            tdl, vdl, config, encoders, validation_leak_test=args.validation_leak_test
+        )
         validation.append(val_score)
     print(validation)

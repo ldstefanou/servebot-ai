@@ -12,7 +12,7 @@ from model.servebot import TennisTransformer
 from paths import save_model_artifacts
 
 
-def validate(model: TennisTransformer, val_dl):
+def validate(model: TennisTransformer, val_dl, validation_leak_test: bool = False):
     model.eval()
     val_correct_total = 0
     val_seen_total = 0
@@ -71,7 +71,7 @@ def update_loss(out, batch):
     return loss
 
 
-def train(tdl, vdl, config, embeddings):
+def train(tdl, vdl, config, embeddings, validation_leak_test: bool = False):
     # Training loop
     reset_metrics()
     model = TennisTransformer(config, embeddings)
@@ -83,13 +83,19 @@ def train(tdl, vdl, config, embeddings):
     for ep in range(config["epochs"]):
         model.train()
         for i, batch in enumerate(tdl):
+            # Flip validation targets for leak test
+            if validation_leak_test:
+                batch["real_target"] = batch["target"].clone()
+                batch["target"] = torch.where(
+                    batch["is_validation"], 1 - batch["target"], batch["target"]
+                )
             out = model(batch)
             loss = update_loss(out, batch)
             log_loss(loss, out, batch, ep, i, len(tdl), scheduler.get_last_lr()[0])
             optim.step()
             scheduler.step()
             optim.zero_grad()
-        acc = validate(model, vdl)
+        acc = validate(model, vdl, validation_leak_test)
         # Save model after each epoch
         save_path = save_model_artifacts(
             model, config, f"epoch_{ep}", optimizer=optim, scheduler=scheduler
