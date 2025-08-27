@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from model.servebot import TennisTransformer
+
 # Base directory (servebot folder)
 BASE_DIR = Path(__file__).parent
 
@@ -25,7 +27,11 @@ def get_model_path(model_name="latest"):
 
 
 def save_model_artifacts(
-    dataset, model, model_name="latest", optimizer=None, scheduler=None
+    model: TennisTransformer,
+    config,
+    model_name="latest",
+    optimizer=None,
+    scheduler=None,
 ):
     import pickle
 
@@ -39,10 +45,10 @@ def save_model_artifacts(
 
     # Save config dict as yaml
     with open(save_path / "model_config.yaml", "w") as f:
-        yaml.dump(dataset.config, f)
+        yaml.dump(config, f)
 
     with open(save_path / "embeddings.pkl", "wb") as f:
-        pickle.dump(dataset.embeddings, f)
+        pickle.dump(model.embeddings, f)
 
     # Save optimizer and scheduler state if provided
     if optimizer is not None:

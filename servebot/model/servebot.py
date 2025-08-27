@@ -65,6 +65,7 @@ def create_player_attention_mask(winner_tokens, loser_tokens, position_tokens):
 class TennisTransformer(Transformer):
     def __init__(self, config, embeddings: Dict[str, Dict[str, int]]):
         super().__init__(config)
+        self.embeddings = embeddings
         self.embedding_dict = nn.ModuleDict()
         self.time = ContinuousTimeEncoding(config["d_model"])
         # Standard embeddings

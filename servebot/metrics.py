@@ -8,15 +8,22 @@ from data.embeddings import decode_batch_of_embeddings
 from tabulate import tabulate
 
 loss_tracker = deque(maxlen=100)
-train_acc_tracker = deque(maxlen=100)
-val_correct_tracker = deque(maxlen=100)
-val_seen_tracker = deque(maxlen=100)
 
 # Global running totals
 total_val_correct = 0
 total_val_seen = 0
 total_train_correct = 0
 total_train_seen = 0
+
+
+def reset_metrics():
+    """Reset all global metric trackers"""
+    global total_val_correct, total_val_seen, total_train_correct, total_train_seen
+    loss_tracker.clear()
+    total_val_correct = 0
+    total_val_seen = 0
+    total_train_correct = 0
+    total_train_seen = 0
 
 
 def log_loss(
@@ -34,7 +41,6 @@ def log_loss(
 
     # Training accuracy (where is_validation == 0)
     train_correct = correct & batch["loss_mask"]
-    train_accuracy = train_correct.sum() / batch["loss_mask"].sum()
 
     # Validation accuracy (where is_validation == 1)
     val_mask = batch["is_validation"]
@@ -42,9 +48,6 @@ def log_loss(
 
     # Update trackers
     loss_tracker.append(loss.item())
-    train_acc_tracker.append(train_accuracy.item())
-    val_seen_tracker.append(val_mask.sum().item())
-    val_correct_tracker.append(val_correct.sum().item())
 
     # Update global running totals
     global total_val_correct, total_val_seen, total_train_correct, total_train_seen
@@ -56,9 +59,10 @@ def log_loss(
     avg_loss = np.mean(loss_tracker)
     avg_train_acc = total_train_correct / (total_train_seen + 1e-8)
     avg_val_acc = total_val_correct / (total_val_seen + 1e-8)
-
     print(
-        f"Epoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f} ({total_val_correct}/{total_val_seen}), LR: {lr:.6f}"
+        f"\rEpoch {ep}, Batch {batch_no}/{total_batches}: Avg Loss: {avg_loss:.4f}, Train Acc: {avg_train_acc:.4f}, Val Acc: {avg_val_acc:.4f} ({total_val_correct}/{total_val_seen}), LR: {lr:.6f}",
+        end="",
+        flush=True,
     )
 
 
