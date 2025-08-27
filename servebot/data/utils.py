@@ -45,3 +45,11 @@ def truncate_and_pad_to_long_tensor(
     trunced = [truncate(s, sequence_length) for s in list_of_sequences]
     list_of_pt = [torch.tensor(y) for r in trunced for y in r]
     return pad_sequence(list_of_pt, batch_first=True, padding_value=padding_value)
+
+
+def find_last_valid_positions(is_padded):
+    """Find the last non-padded position for each sequence."""
+    non_padded = ~is_padded
+    last_valid_pos = non_padded.flip(dims=[1]).long().argmax(dim=1)
+    last_valid_pos = non_padded.size(1) - 1 - last_valid_pos
+    return last_valid_pos

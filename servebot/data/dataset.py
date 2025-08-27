@@ -3,6 +3,8 @@ from typing import Dict, Optional
 import torch
 from torch.utils.data import Dataset, Sampler
 
+from servebot.data.utils import find_last_valid_positions
+
 
 class SimpleDSet(Dataset):
     def __init__(self, sequences, training: bool = True):
@@ -27,11 +29,11 @@ class SimpleDSet(Dataset):
             validation_match_mask |= self.sequences["match_id"].eq(match_idx)
 
         # Determine padding (non-padded positions)
-        non_padded = self.sequences["winner_name_token"].ne(0)
+        is_padded = self.sequences["winner_name_token"].eq(0)
 
         # Find the last non-padded position for each sequence
-        last_valid_pos = non_padded.flip(dims=[1]).long().argmax(dim=1)
-        last_valid_pos = non_padded.size(1) - 1 - last_valid_pos
+        last_valid_pos = find_last_valid_positions(is_padded)
+        non_padded = ~is_padded
 
         # Check if the last non-padded position is a validation match
         batch_indices = torch.arange(validation_match_mask.size(0))
@@ -51,12 +53,12 @@ class SimpleDSet(Dataset):
 
     def __getitem__(self, idx):
         batch = {k: v[idx].clone() for k, v in self.sequences.items()}
+        batch["target"] = torch.zeros_like(batch["winner_name_token"])
         if self.training:
             batch["is_padding"] = batch["winner_name_token"].eq(0)
             batch["loss_mask"] = torch.logical_and(
                 ~batch["is_padding"], ~batch["is_validation"]
             )
-            batch["target"] = torch.zeros_like(batch["winner_name_token"])
             swap_batch_keys(batch, mask=~batch["is_padding"])
         return batch
 
