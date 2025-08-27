@@ -4,9 +4,10 @@ from typing import List
 import numpy as np
 import pandas as pd
 import tqdm
-from data.utils import truncate_and_pad_to_long_tensor
-from model.index import PlayerIndex
 from numpy.lib.stride_tricks import sliding_window_view
+
+from servebot.data.utils import truncate_and_pad_to_long_tensor
+from servebot.model.index import PlayerIndex
 
 
 def create_sliding_window_sequences(df: pd.DataFrame, keys: List[str], seq_length: int):

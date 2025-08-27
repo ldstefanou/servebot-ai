@@ -2,14 +2,14 @@ import torch
 import torch.nn.functional as F
 
 # Read transformer model from yaml
-from metrics import (
+from servebot.metrics import (
     log_loss,
     print_calibration_table,
     print_sequence_results,
     reset_metrics,
 )
-from model.servebot import TennisTransformer
-from paths import save_model_artifacts
+from servebot.model.servebot import TennisTransformer
+from servebot.paths import save_model_artifacts
 
 
 def validate(model: TennisTransformer, val_dl, validation_leak_test: bool = False):
@@ -22,7 +22,7 @@ def validate(model: TennisTransformer, val_dl, validation_leak_test: bool = Fals
     all_correct = []
 
     with torch.no_grad():
-        for i, val_batch in enumerate(val_dl):
+        for val_batch in val_dl:
             out = model(val_batch)
             proba = out.softmax(-1)
             print_sequence_results(val_batch, out, model.embeddings)

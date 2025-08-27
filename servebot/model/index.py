@@ -3,8 +3,9 @@ from heapq import merge
 
 import numpy as np
 import pandas as pd
-from data.embeddings import apply_encoders
-from data.utils import merge_dicts_sorted
+
+from servebot.data.embeddings import apply_encoders
+from servebot.data.utils import merge_dicts_sorted
 
 
 class PlayerIndex:

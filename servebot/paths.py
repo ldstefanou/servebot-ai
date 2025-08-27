@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from model.servebot import TennisTransformer
+from servebot.model.servebot import TennisTransformer
 
 # Base directory (servebot folder)
 BASE_DIR = Path(__file__).parent
@@ -12,6 +12,7 @@ STATIC_DIR = DATA_DIR / "static"
 # Dataset paths - single source file with filtering
 DATASETS = {
     "all": STATIC_DIR / "atp_matches_all_levels.parquet",
+    "odds": STATIC_DIR / "atp_matches_with_odds.parquet",
 }
 
 # Model artifacts
