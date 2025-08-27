@@ -3,11 +3,12 @@ import pickle
 import pandas as pd
 import streamlit as st
 import torch
-from data.dataset import SimpleDSet
-from data.embeddings import apply_encoders
-from data.preprocess import load_data
-from data.sequences import PlayerIndex, create_match_specific_sequences
-from model.servebot import TennisTransformer
+
+from servebot.data.dataset import SimpleDSet
+from servebot.data.embeddings import apply_encoders
+from servebot.data.preprocess import load_data
+from servebot.data.sequences import PlayerIndex, create_match_specific_sequences
+from servebot.model.servebot import TennisTransformer
 
 
 @st.cache_resource
