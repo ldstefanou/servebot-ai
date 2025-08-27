@@ -2,7 +2,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-from paths import get_dataset_path
+
+from servebot.paths import get_dataset_path
 
 
 def load_training_dataframe():
@@ -10,6 +11,115 @@ def load_training_dataframe():
     df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
     df = df.sort_values(["date", "tourney_id", "match_num"])
     return df
+
+
+def load_odds_dataframe():
+    """Load and transform tennis-data.co.uk odds data to match ATP format."""
+    df = pd.read_parquet(get_dataset_path("odds"))
+
+    # Create a mapping from odds data to ATP format
+    df_transformed = pd.DataFrame()
+
+    # Basic match info
+    df_transformed["tourney_name"] = df["Tournament"]
+    df_transformed["surface"] = df["Surface"]
+    df_transformed["tourney_date"] = (
+        pd.to_datetime(df["Date"]).dt.strftime("%Y%m%d").astype(int)
+    )
+    df_transformed["round"] = df["Round"]
+
+    # Player info
+    df_transformed["winner_name"] = df["Winner"]
+    df_transformed["loser_name"] = df["Loser"]
+    df_transformed["winner_rank"] = pd.to_numeric(df["WRank"], errors="coerce")
+    df_transformed["loser_rank"] = pd.to_numeric(df["LRank"], errors="coerce")
+
+    # Set info from individual sets
+    df_transformed["score"] = ""
+    for i in range(1, 6):  # Up to 5 sets
+        w_col, l_col = f"W{i}", f"L{i}"
+        if w_col in df.columns and l_col in df.columns:
+            set_scores = df[w_col].astype(str) + "-" + df[l_col].astype(str)
+            # Only add if both scores are not NaN
+            mask = ~(pd.isna(df[w_col]) | pd.isna(df[l_col]))
+            df_transformed.loc[mask, "score"] += set_scores[mask] + " "
+
+    df_transformed["score"] = df_transformed["score"].str.strip()
+
+    # Add betting odds (average of available bookmakers)
+    winner_odds_cols = [
+        "CBW",
+        "GBW",
+        "IWW",
+        "SBW",
+        "B365W",
+        "B&WW",
+        "EXW",
+        "PSW",
+        "UBW",
+        "LBW",
+        "SJW",
+    ]
+    loser_odds_cols = [
+        "CBL",
+        "GBL",
+        "IWL",
+        "SBL",
+        "B365L",
+        "B&WL",
+        "EXL",
+        "PSL",
+        "UBL",
+        "LBL",
+        "SJL",
+    ]
+
+    # Calculate average odds, ignoring NaN values
+    winner_odds = df[winner_odds_cols].apply(pd.to_numeric, errors="coerce")
+    loser_odds = df[loser_odds_cols].apply(pd.to_numeric, errors="coerce")
+
+    df_transformed["winner_odds"] = winner_odds.mean(axis=1, skipna=True)
+    df_transformed["loser_odds"] = loser_odds.mean(axis=1, skipna=True)
+
+    # Use max and avg odds if available
+    if "MaxW" in df.columns and "MaxL" in df.columns:
+        df_transformed["winner_odds_max"] = pd.to_numeric(df["MaxW"], errors="coerce")
+        df_transformed["loser_odds_max"] = pd.to_numeric(df["MaxL"], errors="coerce")
+
+    if "AvgW" in df.columns and "AvgL" in df.columns:
+        df_transformed["winner_odds_avg"] = pd.to_numeric(df["AvgW"], errors="coerce")
+        df_transformed["loser_odds_avg"] = pd.to_numeric(df["AvgL"], errors="coerce")
+
+    # Add missing columns to match ATP format with defaults
+    df_transformed["tourney_id"] = (
+        df["year"].astype(str) + "-" + df["ATP"].astype(str).str.zfill(4)
+    )
+    df_transformed["draw_size"] = np.nan
+    df_transformed["tourney_level"] = "ATP250"  # Default assumption
+    df_transformed["match_num"] = range(1, len(df_transformed) + 1)
+
+    # Player IDs and details (unknown for odds data)
+    for prefix in ["winner", "loser"]:
+        df_transformed[f"{prefix}_id"] = np.nan
+        df_transformed[f"{prefix}_seed"] = np.nan
+        df_transformed[f"{prefix}_entry"] = ""
+        df_transformed[f"{prefix}_hand"] = "U"  # Unknown
+        df_transformed[f"{prefix}_ht"] = np.nan
+        df_transformed[f"{prefix}_ioc"] = ""
+        df_transformed[f"{prefix}_age"] = 20
+        df_transformed[f"{prefix}_rank_points"] = np.nan
+
+    # Add source identifier
+    df_transformed["source"] = "odds"
+    df_transformed["year"] = df["year"]
+
+    # Create date column for sorting
+    df_transformed["date"] = pd.to_datetime(
+        df_transformed["tourney_date"], format="%Y%m%d"
+    )
+    df_transformed = df_transformed.sort_values(["date", "tourney_id", "match_num"])
+
+    return df_transformed
 
 
 def sample_df_by_match_id(df: pd.DataFrame, size: int):
@@ -96,7 +206,7 @@ def preprocess_dataframe(df: pd.DataFrame):
     df["time_since_epoch"] = df["date"].astype("int64") // 10**9
 
     # h2h scores
-    sets = df[["winner_name", "loser_name"]].apply(frozenset, axis=1)
+    sets = df[["winner_name", "loser_name"]].apply(lambda x: frozenset(x), axis=1)
     df["h2h_winner_player"] = df.groupby([sets, "winner_name"]).cumcount()
     df["h2h_loser_player"] = df.groupby(sets).cumcount() - df["h2h_winner_player"]
 
@@ -183,9 +293,11 @@ def load_data(
     from_year: Optional[int] = None,
     filter_matches: str = "all",
 ):
-    df = load_training_dataframe()
+    if filter_matches == "odds":
+        df = load_odds_dataframe()
+    else:
+        df = load_training_dataframe()
     df = preprocess_dataframe(df)
-
     # Filter by match type
     if filter_matches == "atp":
         df = df[df["source"] == "atp"]
@@ -196,5 +308,4 @@ def load_data(
         df = df.iloc[-last:].copy()
     if from_year is not None:
         df = df[df["year"].ge(from_year)].copy()
-
     return df.reset_index()
