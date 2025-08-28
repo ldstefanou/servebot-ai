@@ -2,10 +2,10 @@ import argparse
 
 import torch
 import yaml
+from data.encodings import apply_encoders, create_encoders
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 
 from servebot.data.dataset import SimpleDSet
-from servebot.data.embeddings import apply_encoders, create_encoders
 from servebot.data.preprocess import get_last_tournament_match_indexes, load_data
 from servebot.data.sequences import create_match_specific_sequences
 from servebot.data.utils import set_seed

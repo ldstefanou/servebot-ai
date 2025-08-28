@@ -4,9 +4,8 @@ from collections import deque
 import numpy as np
 import pandas as pd
 import torch
+from data.encodings import decode_batch_of_encodings
 from tabulate import tabulate
-
-from servebot.data.embeddings import decode_batch_of_embeddings
 
 loss_tracker = deque(maxlen=100)
 
@@ -71,7 +70,7 @@ def print_sequence_results(batch: dict, out, mappings: dict):
     # random sequence from batch
     for rnd in range(out.shape[0]):
         sequence_length = (~batch["is_padding"]).cumsum(dim=1).argmax(-1)[rnd] + 1
-        decoded = decode_batch_of_embeddings(batch, mappings)
+        decoded = decode_batch_of_encodings(batch, mappings)
 
         left_p = decoded["winner_name_token"][rnd, :sequence_length].tolist()
         right_p = decoded["loser_name_token"][rnd, :sequence_length].tolist()

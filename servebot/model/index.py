@@ -3,8 +3,8 @@ from heapq import merge
 
 import numpy as np
 import pandas as pd
+from data.encodings import apply_encoders
 
-from servebot.data.embeddings import apply_encoders
 from servebot.data.utils import FuzzyDict, merge_dicts_sorted
 
 

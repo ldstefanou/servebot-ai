@@ -3,9 +3,9 @@ from datetime import datetime
 
 import torch
 import yaml
+from data.encodings import apply_encoders
 
 from servebot.data.dataset import SimpleDSet
-from servebot.data.embeddings import apply_encoders
 from servebot.data.preprocess import load_data
 from servebot.data.sequences import create_match_specific_sequences
 from servebot.data.utils import find_last_valid_positions
