@@ -1,6 +1,6 @@
 import pytest
 
-from servebot.data.utils import find_most_similar_player
+from servebot.data.utils import find_most_similar_string
 
 
 @pytest.mark.parametrize(
@@ -29,4 +29,4 @@ def test_find_most_similar_player(target, expected):
         "Pete Sampras",
     ]
 
-    assert find_most_similar_player(players, target) == expected
+    assert find_most_similar_string(players, target) == expected

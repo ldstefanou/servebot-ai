@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from servebot.data.embeddings import apply_encoders
-from servebot.data.utils import merge_dicts_sorted
+from servebot.data.utils import FuzzyDict, merge_dicts_sorted
 
 
 class PlayerIndex:
@@ -18,7 +18,8 @@ class PlayerIndex:
         winner_matches = df.groupby("winner_name").indices
         loser_matches = df.groupby("loser_name").indices
 
-        self.index = merge_dicts_sorted(winner_matches, loser_matches)
+        index = merge_dicts_sorted(winner_matches, loser_matches)
+        self.index = FuzzyDict(index)
         self.df = df
 
     def get_last_value_for_player(self, player: str, key: str):

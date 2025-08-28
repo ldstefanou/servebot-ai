@@ -60,7 +60,7 @@ def find_most_similar_string(strings: List[str], string: str):
     """Find most similar string from strings given string"""
     from rapidfuzz import process
 
-    result = process.extractOne(strings, string)
+    result = process.extractOne(string, strings)
     return result[0] if result else strings[0]
 
 

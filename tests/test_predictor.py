@@ -8,7 +8,7 @@ def test_basic_prediction():
     assert len(predictor.index.players) > 0
 
     p1 = "N. Djokovic"
-    p2 = "R. Federer"
+    p2 = "D. Shapovalov"
     prob = predictor.predict(p1, p2)
 
     assert 0 <= prob <= 1, f"Probability should be between 0 and 1, got {prob}"
