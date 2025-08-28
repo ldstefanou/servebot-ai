@@ -1,3 +1,4 @@
+import pandas as pd
 import torch
 
 from servebot.data.utils import find_last_valid_positions
@@ -40,23 +41,6 @@ def serialize_predictions_with_context(model, dataloader, df):
 
     df_pred = pd.DataFrame(predictions)
 
-    # Merge with original dataframe for full context
-    match_cols = [
-        "match_id",
-        "winner_name",
-        "loser_name",
-        "surface",
-        "tournament",
-        "round",
-        "date",
-        "winner_rank",
-        "loser_rank",
-    ]
-    if "winner_odds_avg" in df.columns:
-        match_cols.extend(["winner_odds_avg", "loser_odds_avg"])
-
-    df_matches = df[match_cols].drop_duplicates(subset=["match_id"])
-    df_pred = df_pred.merge(df_matches, on="match_id", how="left")
-
+    df_pred = df_pred.merge(df, on="match_id", how="left")
     df_pred.to_parquet("predictions.parquet")
     return df_pred
