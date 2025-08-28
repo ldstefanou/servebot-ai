@@ -3,8 +3,9 @@ from typing import Dict
 import torch
 import torch.nn as nn
 import yaml
-from model.time_encoding import ContinuousTimeEncoding
-from model.transformer import Transformer
+
+from servebot.model.time_encoding import ContinuousTimeEncoding
+from servebot.model.transformer import Transformer
 
 
 def create_player_attention_mask(winner_tokens, loser_tokens, position_tokens):

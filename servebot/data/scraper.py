@@ -6,6 +6,8 @@ from typing import Optional
 
 import pandas as pd
 
+from servebot.paths import get_dataset_path
+
 
 def download_year(year: int) -> Optional[pd.DataFrame]:
     """Download tennis data for a single year."""
@@ -57,7 +59,7 @@ def download_all_tennis_data() -> pd.DataFrame:
 
 def main():
     df = download_all_tennis_data()
-    df.to_parquet("data/tennis_data.parquet")
+    df.to_parquet(get_dataset_path("odds"))
     print(f"Saved {len(df)} total matches")
 
 

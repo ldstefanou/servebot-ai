@@ -4,7 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import yaml
-from model.forget import ForgettingTransformerBlock
+
+from servebot.model.forget import ForgettingTransformerBlock
 
 
 class AttentionHead(nn.Module):

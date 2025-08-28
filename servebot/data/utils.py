@@ -1,6 +1,7 @@
 import random
 from collections import defaultdict
 from heapq import merge
+from typing import List
 
 import numpy as np
 import torch
@@ -45,3 +46,33 @@ def truncate_and_pad_to_long_tensor(
     trunced = [truncate(s, sequence_length) for s in list_of_sequences]
     list_of_pt = [torch.tensor(y) for r in trunced for y in r]
     return pad_sequence(list_of_pt, batch_first=True, padding_value=padding_value)
+
+
+def find_last_valid_positions(is_padded):
+    """Find the last non-padded position for each sequence."""
+    non_padded = ~is_padded
+    last_valid_pos = non_padded.flip(dims=[1]).long().argmax(dim=1)
+    last_valid_pos = non_padded.size(1) - 1 - last_valid_pos
+    return last_valid_pos
+
+
+def find_most_similar_string(strings: List[str], string: str):
+    """Find most similar string from strings given string"""
+    from rapidfuzz import process
+
+    result = process.extractOne(string, strings)
+    return result[0] if result else strings[0]
+
+
+class FuzzyDict(dict):
+    def __init__(self, d):
+        super().__init__(d)
+        self.d = d
+
+    def __getitem__(self, s):
+        try:
+            return self.d[s]
+        except:
+            s_matched = find_most_similar_string(self.d.keys(), s)
+            print(f"Matched unknown player {s} to {s_matched}")
+            return self.d[s_matched]
