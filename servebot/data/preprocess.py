@@ -233,58 +233,41 @@ def preprocess_dataframe(df: pd.DataFrame):
     return df
 
 
-def set_validation_matches(
-    df: pd.DataFrame, validate_on_last_slam: bool = True, validation_size=0.05
+def get_last_tournament_match_indexes(
+    df: pd.DataFrame, tournament_index: int = 0, grand_slam_only: bool = True
 ):
-
-    if validate_on_last_slam:
-        # Define Grand Slam names
-        grand_slams = ["australian open", "roland garros", "wimbledon", "us open"]
-        is_slam = df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
-        tourney_id = df.groupby(is_slam)["tourney_id"].last().loc[True]
-
-        # Mark validation rows
-        df["is_validation"] = df["tourney_id"].eq(tourney_id)
-        last_slam_index = df[df["tourney_id"] == tourney_id].index[-1]
-
-        # Mark validation rows (this marks the last Grand Slam matches)
-        df["is_validation"] = df["tourney_id"].eq(tourney_id)
-
-        # Now filter out rows that come after the last index of the last Grand Slam
-        df = df.loc[:last_slam_index].copy()
-
-    else:
-        val_size = int(len(df) * (1 - validation_size))
-        validation_match_ids = df[val_size:]["match_id"].unique()
-        df["is_validation"] = df["match_id"].isin(validation_match_ids)
-
-    return df
-
-
-def get_grand_slam_match_indexes(df: pd.DataFrame, slam_index: int = 0):
     """
-    Get match_ids for a specific Grand Slam tournament.
+    Get match_ids for the last tournament.
 
     Args:
         df: The tennis dataframe (assumed to be sorted by date)
-        slam_index: Index of Grand Slam (0 = last/most recent, 1 = second to last, etc.)
+        tournament_index: Index of tournament (0 = last/most recent, 1 = second to last, etc.)
+        grand_slam_only: Whether to filter only Grand Slam tournaments
 
     Returns:
-        List of match_ids that belong to the selected Grand Slam
+        List of match_ids that belong to the selected tournament
     """
-    # Define Grand Slam names
-    grand_slams = ["australian open", "roland garros", "wimbledon", "us open"]
+    if grand_slam_only:
+        # Define Grand Slam names
+        grand_slams = ["australian open", "roland garros", "wimbledon", "us open"]
+        # Filter by Grand Slams
+        tournament_filter = (
+            df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
+        )
+        filtered_df = df[tournament_filter]
+    else:
+        # Use all tournaments
+        filtered_df = df
 
-    # Filter by Grand Slams and group by tournament
-    is_slam = df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
-    slam_groups = df[is_slam].groupby(["tourney_id", "year"])
+    # Group by tournament
+    tournament_groups = filtered_df.groupby(["tourney_id", "year"])
 
     # Get the n-th group from the end
-    group_keys = list(slam_groups.groups.keys())
-    selected_tourney_id = group_keys[-(slam_index + 1)]
+    group_keys = list(tournament_groups.groups.keys())
+    selected_tourney_id = group_keys[-(tournament_index + 1)]
 
     # Return all match_ids for this tournament
-    return slam_groups.get_group(selected_tourney_id)["match_id"].tolist()
+    return tournament_groups.get_group(selected_tourney_id)["match_id"].tolist()
 
 
 def load_data(
