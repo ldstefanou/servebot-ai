@@ -4,8 +4,9 @@ from collections import deque
 import numpy as np
 import pandas as pd
 import torch
-from data.encodings import decode_batch_of_encodings
 from tabulate import tabulate
+
+from servebot.data.encodings import decode_batch_of_encodings
 
 loss_tracker = deque(maxlen=100)
 
