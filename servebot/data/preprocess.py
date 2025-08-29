@@ -10,7 +10,7 @@ def load_training_dataframe():
     df = pd.read_parquet(get_dataset_path("all"))
     df["date"] = pd.to_datetime(df["tourney_date"], format="%Y%m%d")
     df = df.sort_values(["date", "tourney_id", "match_num"])
-    return df
+    return df[df["source"] == "atp"]
 
 
 def load_odds_dataframe():
@@ -189,7 +189,6 @@ def bin_continuous_features(df: pd.DataFrame):
         "Top 1000",
         "1000+",
     ]
-
     df["winner_rank"] = pd.cut(
         df["winner_rank"].fillna(0), bins=ranking_bins, labels=ranking_labels
     ).astype(str)
@@ -216,6 +215,7 @@ def preprocess_dataframe(df: pd.DataFrame):
     # Apply categorical binning
     df = bin_continuous_features(df)
 
+    df["tourney_name"] = df["tourney_name"].str.replace("Us Open", "US Open")
     # clean tournament name
     df["tourney_str"] = (
         df["tourney_name"].str.split(" ").apply(lambda x: " ".join(x[:4]))
@@ -237,7 +237,7 @@ def get_last_tournament_match_indexes(
     df: pd.DataFrame, tournament_index: int = 0, grand_slam_only: bool = True
 ):
     """
-    Get match_ids for the last tournament.
+    Get dataframe indexes for the last tournament.
 
     Args:
         df: The tennis dataframe (assumed to be sorted by date)
@@ -245,7 +245,7 @@ def get_last_tournament_match_indexes(
         grand_slam_only: Whether to filter only Grand Slam tournaments
 
     Returns:
-        List of match_ids that belong to the selected tournament
+        List of dataframe indexes that belong to the selected tournament
     """
     if grand_slam_only:
         # Define Grand Slam names
@@ -254,20 +254,21 @@ def get_last_tournament_match_indexes(
         tournament_filter = (
             df["tourney_str"].str.lower().str.contains("|".join(grand_slams))
         )
-        filtered_df = df[tournament_filter]
+        filtered_df = df[tournament_filter].copy()
     else:
         # Use all tournaments
-        filtered_df = df
+        filtered_df = df.copy()
 
-    # Group by tournament
-    tournament_groups = filtered_df.groupby(["tourney_id", "year"])
+    # Get the last tournament's info
+    last_row = filtered_df.iloc[-(tournament_index + 1)]
+    last_tourney = last_row["tourney_str"]
+    last_year = last_row["year"]
 
-    # Get the n-th group from the end
-    group_keys = list(tournament_groups.groups.keys())
-    selected_tourney_id = group_keys[-(tournament_index + 1)]
-
-    # Return all match_ids for this tournament
-    return tournament_groups.get_group(selected_tourney_id)["match_id"].tolist()
+    # Return all matches from that tournament
+    mask = (filtered_df["tourney_str"] == last_tourney) & (
+        filtered_df["year"] == last_year
+    )
+    return filtered_df[mask]["match_id"].tolist()
 
 
 def load_data(

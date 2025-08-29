@@ -12,7 +12,7 @@ from servebot.model.servebot import TennisTransformer
 from servebot.paths import save_model_artifacts
 
 
-def validate(model: TennisTransformer, val_dl, validation_leak_test: bool = False):
+def validate(model: TennisTransformer, val_dl):
     model.eval()
     val_correct_total = 0
     val_seen_total = 0
@@ -25,7 +25,7 @@ def validate(model: TennisTransformer, val_dl, validation_leak_test: bool = Fals
         for val_batch in val_dl:
             out = model(val_batch)
             proba = out.softmax(-1)
-            print_sequence_results(val_batch, out, model.embeddings)
+            print_sequence_results(val_batch, out, model.encoders)
 
             val_predictions = torch.argmax(out, dim=-1)
             val_targets = val_batch["target"]
@@ -71,10 +71,10 @@ def update_loss(out, batch):
     return loss
 
 
-def train(tdl, vdl, config, embeddings, validation_leak_test: bool = False):
+def train(tdl, vdl, config, encoders, validation_leak_test: bool = False) -> float:
     # Training loop
     reset_metrics()
-    model = TennisTransformer(config, embeddings)
+    model = TennisTransformer(config, encoders)
 
     optim = torch.optim.AdamW(model.parameters(), lr=3e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -95,7 +95,7 @@ def train(tdl, vdl, config, embeddings, validation_leak_test: bool = False):
             optim.step()
             scheduler.step()
             optim.zero_grad()
-        acc = validate(model, vdl, validation_leak_test)
+        acc = validate(model, vdl)
         # Save model after each epoch
         save_path = save_model_artifacts(
             model, config, f"epoch_{ep}", optimizer=optim, scheduler=scheduler

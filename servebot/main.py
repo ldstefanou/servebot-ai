@@ -5,7 +5,7 @@ import yaml
 from torch.utils.data import DataLoader, Subset, SubsetRandomSampler
 
 from servebot.data.dataset import SimpleDSet
-from servebot.data.embeddings import apply_encoders, create_encoders
+from servebot.data.encodings import apply_encoders, create_encoders
 from servebot.data.preprocess import get_last_tournament_match_indexes, load_data
 from servebot.data.sequences import create_match_specific_sequences
 from servebot.data.utils import set_seed
@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     index = PlayerIndex(df)
     sequences = create_match_specific_sequences(
-        df, index, config["columns"], config["seq_length"]
+        index, config["columns"], config["seq_length"]
     )
     dset = SimpleDSet(sequences)
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
         for slam_index in (0,):
             val_match_indexes = get_last_tournament_match_indexes(
-                df, tournament_index=slam_index, grand_slam_only=False
+                df, tournament_index=slam_index, grand_slam_only=True
             )
             print(
                 f"Using Grand Slam index {slam_index} with {len(val_match_indexes)} matches for validation"

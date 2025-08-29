@@ -36,14 +36,14 @@ def create_encoders(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, in
     return embeddings
 
 
-def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
+def apply_encoders(df: pd.DataFrame, encoders: Dict[str, Dict[str, int]]):
     """Apply token mappings to dataframe columns.
 
     Parameters
     ----------
     df : pd.DataFrame
         Input dataframe
-    embeddings : Dict[str, Dict[str, int]]
+    encoders : Dict[str, Dict[str, int]]
         Token mappings from create_embeddings()
 
     Returns
@@ -51,7 +51,7 @@ def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     pd.DataFrame
         Dataframe with added _token columns
     """
-    for embedding_key, mapping in embeddings.items():
+    for embedding_key, mapping in encoders.items():
         if embedding_key.startswith("player_"):
             # Shared player embeddings - apply to both winner and loser
             feature = embedding_key.removeprefix("player_")
@@ -69,8 +69,8 @@ def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     return df.dropna(subset=token_columns)
 
 
-def decode_batch_of_embeddings(
-    batch: Dict, embeddings: Dict[str, Dict[str, int]]
+def decode_batch_of_encodings(
+    batch: Dict, encodings: Dict[str, Dict[str, int]]
 ) -> Dict:
     """Convert token tensors back to original string values.
 
@@ -78,7 +78,7 @@ def decode_batch_of_embeddings(
     ----------
     batch : Dict
         Batch dictionary with token tensors
-    embeddings : Dict[str, Dict[str, int]]
+    encodings : Dict[str, Dict[str, int]]
         Token mappings
 
     Returns
@@ -87,7 +87,7 @@ def decode_batch_of_embeddings(
         Decoded string values in same batch format
     """
     reverse_embeddings = {}
-    for key, mapping in embeddings.items():
+    for key, mapping in encodings.items():
         reverse_embeddings[key] = {v: k for k, v in mapping.items()}
 
     decoded = {}

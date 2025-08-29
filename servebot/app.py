@@ -5,7 +5,7 @@ import streamlit as st
 import torch
 
 from servebot.data.dataset import SimpleDSet
-from servebot.data.embeddings import apply_encoders
+from servebot.data.encodings import apply_encoders
 from servebot.data.preprocess import load_data
 from servebot.data.sequences import PlayerIndex, create_match_specific_sequences
 from servebot.model.servebot import TennisTransformer
@@ -13,19 +13,19 @@ from servebot.model.servebot import TennisTransformer
 
 @st.cache_resource
 def load_model():
-    """Load and cache the trained model and embeddings"""
+    """Load and cache the trained model and encoders"""
     try:
         model_path = "servebot/data/static/models/model_epoch_4"
 
         # Load embeddings
-        with open(f"{model_path}/embeddings.pkl", "rb") as f:
-            embeddings = pickle.load(f)
+        with open(f"{model_path}/encoders.pkl", "rb") as f:
+            encoders = pickle.load(f)
 
         # Load model
-        model = TennisTransformer.from_saved_artifacts(model_path, embeddings)
+        model = TennisTransformer.from_saved_artifacts(model_path, encoders)
         model.eval()  # Set to evaluation mode
 
-        return model, embeddings
+        return model, encoders
     except Exception as e:
         st.error(f"Failed to load model: {e}")
         return None, None

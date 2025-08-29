@@ -1,7 +1,7 @@
 from typing import Dict, Optional
 
 import torch
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Dataset
 
 from servebot.data.utils import find_last_valid_positions
 
@@ -54,47 +54,13 @@ class SimpleDSet(Dataset):
     def __getitem__(self, idx):
         batch = {k: v[idx].clone() for k, v in self.sequences.items()}
         batch["target"] = torch.zeros_like(batch["winner_name_token"])
+        batch["is_padding"] = batch["winner_name_token"].eq(0)
         if self.training:
-            batch["is_padding"] = batch["winner_name_token"].eq(0)
             batch["loss_mask"] = torch.logical_and(
                 ~batch["is_padding"], ~batch["is_validation"]
             )
             swap_batch_keys(batch, mask=~batch["is_padding"])
         return batch
-
-    def save_model_artifacts(self, model, save_dir="model_artifacts"):
-        import pickle
-        from pathlib import Path
-
-        import torch
-        import yaml
-
-        save_path = Path(save_dir)
-        save_path.mkdir(exist_ok=True)
-
-        torch.save(model.state_dict(), save_path / "model_weights.pt")
-
-        # Save config dict as yaml
-        with open(save_path / "model_config.yaml", "w") as f:
-            yaml.dump(self.config, f)
-
-        with open(save_path / "embeddings.pkl", "wb") as f:
-            pickle.dump(self.embeddings, f)
-
-        return save_path
-
-
-class ValSampler(Sampler):
-    def __init__(self, dataset):
-        # Get all is_validation tensors and find sequences with ANY validation examples
-        any_is_val = dataset.is_validation.any(dim=1)
-        self.val_indices = any_is_val.nonzero(as_tuple=True)[0].tolist()
-
-    def __iter__(self):
-        return iter(self.val_indices)
-
-    def __len__(self):
-        return len(self.val_indices)
 
 
 def swap_batch_keys(

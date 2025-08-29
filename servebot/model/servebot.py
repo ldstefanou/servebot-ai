@@ -64,13 +64,13 @@ def create_player_attention_mask(winner_tokens, loser_tokens, position_tokens):
 
 
 class TennisTransformer(Transformer):
-    def __init__(self, config, embeddings: Dict[str, Dict[str, int]]):
+    def __init__(self, config, encoders: Dict[str, Dict[str, int]]):
         super().__init__(config)
-        self.embeddings = embeddings
+        self.encoders = encoders
         self.embedding_dict = nn.ModuleDict()
         self.time = ContinuousTimeEncoding(config["d_model"])
         # Standard embeddings
-        for key, mapping in embeddings.items():
+        for key, mapping in encoders.items():
             self.embedding_dict[key] = nn.Embedding(
                 len(mapping), config["d_model"], padding_idx=0
             )
@@ -159,16 +159,14 @@ class TennisTransformer(Transformer):
         return self.to_pred(x)
 
     @classmethod
-    def from_saved_artifacts(
-        cls, model_path: str, embeddings: Dict[str, Dict[str, int]]
-    ):
+    def from_saved_artifacts(cls, model_path: str, encoders: Dict[str, Dict[str, int]]):
         """Load model from saved artifacts directory"""
         # Load config
         with open(f"{model_path}/model_config.yaml", "r") as f:
             config = yaml.safe_load(f)
 
         # Create model instance
-        model = cls(config, embeddings)
+        model = cls(config, encoders)
 
         # Load weights
         weights = torch.load(f"{model_path}/model_weights.pt", map_location="cpu")

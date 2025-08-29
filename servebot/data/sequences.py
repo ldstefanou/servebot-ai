@@ -59,14 +59,16 @@ def create_player_specific_sequences(
 
 
 def create_match_specific_sequences(
-    match_df: pd.DataFrame, player_index: PlayerIndex, keys: List[str], seq_length: int
+    player_index: PlayerIndex, keys: List[str], seq_length: int
 ):
     """Create sequences combining both players' histories for each match."""
-    print(f"Creating match sequences for {len(match_df)} matches...")
+    print(f"Creating match sequences for {len(player_index.df)} matches...")
     containers = defaultdict(list)
 
     for idx, row in tqdm.tqdm(
-        match_df.iterrows(), total=len(match_df), desc="Creating match sequences"
+        player_index.df.iterrows(),
+        total=len(player_index.df),
+        desc="Creating match sequences",
     ):
         match_sequence = player_index.get_matches_by_players(
             row["winner_name"], row["loser_name"]
@@ -84,7 +86,6 @@ def create_match_specific_sequences(
         containers["position_token"].append(np.arange(1, len(merged_rows) + 1))
 
     all_tokens = {}
-
     for key, container in tqdm.tqdm(
         containers.items(), desc="Creating match centric sequence tensors"
     ):
