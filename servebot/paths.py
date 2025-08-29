@@ -49,7 +49,7 @@ def save_model_artifacts(
         yaml.dump(config, f)
 
     with open(save_path / "embeddings.pkl", "wb") as f:
-        pickle.dump(model.embeddings, f)
+        pickle.dump(model.encoders, f)
 
     # Save optimizer and scheduler state if provided
     if optimizer is not None:

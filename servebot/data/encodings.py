@@ -36,14 +36,14 @@ def create_encoders(df: pd.DataFrame, cols: List[str]) -> Dict[str, Dict[str, in
     return embeddings
 
 
-def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
+def apply_encoders(df: pd.DataFrame, encoders: Dict[str, Dict[str, int]]):
     """Apply token mappings to dataframe columns.
 
     Parameters
     ----------
     df : pd.DataFrame
         Input dataframe
-    embeddings : Dict[str, Dict[str, int]]
+    encoders : Dict[str, Dict[str, int]]
         Token mappings from create_embeddings()
 
     Returns
@@ -51,7 +51,7 @@ def apply_encoders(df: pd.DataFrame, embeddings: Dict[str, Dict[str, int]]):
     pd.DataFrame
         Dataframe with added _token columns
     """
-    for embedding_key, mapping in embeddings.items():
+    for embedding_key, mapping in encoders.items():
         if embedding_key.startswith("player_"):
             # Shared player embeddings - apply to both winner and loser
             feature = embedding_key.removeprefix("player_")
