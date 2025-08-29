@@ -7,6 +7,7 @@ import torch
 from tabulate import tabulate
 
 from servebot.data.encodings import decode_batch_of_encodings
+from servebot.data.utils import find_last_valid_positions
 
 loss_tracker = deque(maxlen=100)
 
@@ -67,12 +68,11 @@ def log_loss(
     )
 
 
-def print_sequence_results(batch: dict, out, mappings: dict):
+def print_sequence_results(batch: dict, out, mappings: dict, print_last=True):
     # random sequence from batch
     for rnd in range(out.shape[0]):
-        sequence_length = (~batch["is_padding"]).cumsum(dim=1).argmax(-1)[rnd] + 1
+        sequence_length = find_last_valid_positions(batch["is_padding"])[rnd] + 1
         decoded = decode_batch_of_encodings(batch, mappings)
-
         left_p = decoded["winner_name_token"][rnd, :sequence_length].tolist()
         right_p = decoded["loser_name_token"][rnd, :sequence_length].tolist()
         left_rank = decoded["winner_rank_token"][rnd, :sequence_length].tolist()
@@ -86,9 +86,17 @@ def print_sequence_results(batch: dict, out, mappings: dict):
         confidence, preds = out.softmax(-1).max(dim=-1)
         confidence = confidence[rnd, :sequence_length].tolist()
         preds = preds[rnd, :sequence_length].tolist()
-        is_validation = batch["is_validation"][rnd, :sequence_length].tolist()
+        is_validation = batch.get(
+            "is_validation", torch.ones_like(batch["winner_name_token"]).bool()
+        )[rnd, :sequence_length].tolist()
 
-        for i in range(sequence_length - 1, sequence_length):
+        range_to_print = (
+            range(sequence_length - 1, sequence_length)
+            if print_last
+            else range(sequence_length)
+        )
+
+        for i in range_to_print:
             is_val_match = is_validation[i]
             if not is_val_match:
                 continue
